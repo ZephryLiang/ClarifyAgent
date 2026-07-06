@@ -12,9 +12,7 @@ full observability into the agent's reasoning steps.
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..config import settings as default_settings
 from ..gateway.base import Message, ToolCall
@@ -26,7 +24,7 @@ from .trace import SpanKind, SpanStatus, Tracer
 @dataclass
 class AgentResult:
     output: str
-    messages: List[Message] = field(default_factory=list)
+    messages: list[Message] = field(default_factory=list)
     iterations: int = 0
     tool_calls: int = 0
     stopped_reason: str = "completed"
@@ -38,14 +36,14 @@ class Agent:
     def __init__(
         self,
         gateway: Gateway,
-        tools: Optional[ToolRegistry] = None,
-        tracer: Optional[Tracer] = None,
+        tools: ToolRegistry | None = None,
+        tracer: Tracer | None = None,
         system: str = "",
         name: str = "agent",
-        max_iterations: Optional[int] = None,
+        max_iterations: int | None = None,
         temperature: float = 0.4,
-        prefer_provider: Optional[str] = None,
-        parent_span_id: Optional[str] = None,
+        prefer_provider: str | None = None,
+        parent_span_id: str | None = None,
     ) -> None:
         self.gateway = gateway
         self.tools = tools or ToolRegistry()
@@ -57,8 +55,8 @@ class Agent:
         self.prefer_provider = prefer_provider
         self.parent_span_id = parent_span_id
 
-    async def run(self, prompt: str, history: Optional[List[Message]] = None) -> AgentResult:
-        messages: List[Message] = list(history or [])
+    async def run(self, prompt: str, history: list[Message] | None = None) -> AgentResult:
+        messages: list[Message] = list(history or [])
         messages.append(Message(role="user", content=prompt))
 
         agent_span = self.tracer.start_span(self.name, SpanKind.AGENT, self.parent_span_id,
@@ -83,7 +81,7 @@ class Agent:
                 # Execute all requested tool calls (in parallel).
                 results = await self._execute_tools(response.tool_calls, agent_span.id)
                 total_tool_calls += len(results)
-                for call, result in zip(response.tool_calls, results):
+                for call, result in zip(response.tool_calls, results, strict=False):
                     messages.append(Message(role="tool", tool_call_id=call.id,
                                             name=call.name, content=result.content))
 
@@ -100,7 +98,7 @@ class Agent:
         span = self.tracer.start_span(f"llm:{self.prefer_provider or 'auto'}", SpanKind.LLM,
                                       parent_id, message_count=len(messages))
 
-        def on_attempt(provider_name: str, error: Optional[Exception]) -> None:
+        def on_attempt(provider_name: str, error: Exception | None) -> None:
             self.tracer.log(f"llm attempt via {provider_name}"
                             + (f" failed: {error}" if error else " ok"),
                             provider=provider_name, ok=error is None)
@@ -127,7 +125,7 @@ class Agent:
                              tool_calls=[tc.name for tc in response.tool_calls])
         return response
 
-    async def _execute_tools(self, calls: List[ToolCall], parent_id: str) -> List[ToolResult]:
+    async def _execute_tools(self, calls: list[ToolCall], parent_id: str) -> list[ToolResult]:
         async def run_one(call: ToolCall) -> ToolResult:
             span = self.tracer.start_span(f"tool:{call.name}", SpanKind.TOOL, parent_id,
                                           arguments=call.arguments)

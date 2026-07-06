@@ -13,7 +13,7 @@ maps the response back into a provider-agnostic :class:`ChatResponse`.
 from __future__ import annotations
 
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .base import (
     ChatProvider,
@@ -29,8 +29,8 @@ from .base import (
 class AnthropicAdapter(ChatProvider):
     protocol = "anthropic"
 
-    def __init__(self, name: str, model: str, api_key: Optional[str],
-                 base_url: Optional[str] = None, timeout: float = 60.0) -> None:
+    def __init__(self, name: str, model: str, api_key: str | None,
+                 base_url: str | None = None, timeout: float = 60.0) -> None:
         self.name = name
         self.model = model
         self.api_key = api_key
@@ -50,22 +50,22 @@ class AnthropicAdapter(ChatProvider):
             from anthropic import Anthropic  # type: ignore
         except ImportError:
             return None
-        kwargs: Dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout}
+        kwargs: dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout}
         if self.base_url:
             kwargs["base_url"] = self.base_url
         self._client = Anthropic(**kwargs)
         return self._client
 
     @staticmethod
-    def _to_anthropic_messages(messages: List[Message]) -> List[Dict[str, Any]]:
+    def _to_anthropic_messages(messages: list[Message]) -> list[dict[str, Any]]:
         """Translate unified messages into Anthropic message blocks.
 
         Consecutive ``tool`` results are merged into a single user turn, as the
         API expects tool_result blocks grouped in one user message.
         """
 
-        out: List[Dict[str, Any]] = []
-        pending_tool_results: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
+        pending_tool_results: list[dict[str, Any]] = []
 
         def flush_tool_results() -> None:
             nonlocal pending_tool_results
@@ -87,7 +87,7 @@ class AnthropicAdapter(ChatProvider):
             flush_tool_results()
 
             if m.role == "assistant" and m.tool_calls:
-                blocks: List[Dict[str, Any]] = []
+                blocks: list[dict[str, Any]] = []
                 if m.content:
                     blocks.append({"type": "text", "text": m.content})
                 for tc in m.tool_calls:
@@ -105,8 +105,8 @@ class AnthropicAdapter(ChatProvider):
         return out
 
     @staticmethod
-    def _collect_system(messages: List[Message], system: Optional[str]) -> Optional[str]:
-        parts: List[str] = []
+    def _collect_system(messages: list[Message], system: str | None) -> str | None:
+        parts: list[str] = []
         if system:
             parts.append(system)
         for m in messages:
@@ -115,7 +115,7 @@ class AnthropicAdapter(ChatProvider):
         return "\n\n".join(parts) if parts else None
 
     @staticmethod
-    def _to_anthropic_tools(tools: Optional[List[ToolSpec]]) -> Optional[List[Dict[str, Any]]]:
+    def _to_anthropic_tools(tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:
         if not tools:
             return None
         return [
@@ -128,7 +128,7 @@ class AnthropicAdapter(ChatProvider):
         if client is None:
             raise ProviderError(f"provider '{self.name}' is not available (missing anthropic SDK or key)")
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": self._to_anthropic_messages(messages),
             "max_tokens": max_tokens,
@@ -146,8 +146,8 @@ class AnthropicAdapter(ChatProvider):
         except Exception as exc:  # noqa: BLE001 - normalise
             raise ProviderError(str(exc)) from exc
 
-        text_parts: List[str] = []
-        tool_calls: List[ToolCall] = []
+        text_parts: list[str] = []
+        tool_calls: list[ToolCall] = []
         for block in resp.content:
             btype = getattr(block, "type", None)
             if btype == "text":

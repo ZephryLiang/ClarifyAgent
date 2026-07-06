@@ -13,7 +13,7 @@ import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class SpanKind(str, Enum):
@@ -40,21 +40,21 @@ class Span:
     name: str
     kind: SpanKind
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     status: SpanStatus = SpanStatus.RUNNING
     start_ms: float = field(default_factory=_now_ms)
-    end_ms: Optional[float] = None
-    attributes: Dict[str, Any] = field(default_factory=dict)
+    end_ms: float | None = None
+    attributes: dict[str, Any] = field(default_factory=dict)
     tokens: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
-    def duration_ms(self) -> Optional[float]:
+    def duration_ms(self) -> float | None:
         if self.end_ms is None:
             return None
         return round(self.end_ms - self.start_ms, 1)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["kind"] = self.kind.value
         d["status"] = self.status.value
@@ -70,15 +70,15 @@ class Tracer:
     is present (e.g. in unit tests) events are simply buffered in ``spans``.
     """
 
-    def __init__(self, trace_id: Optional[str] = None) -> None:
+    def __init__(self, trace_id: str | None = None) -> None:
         self.trace_id = trace_id or uuid.uuid4().hex[:12]
-        self.spans: List[Span] = []
-        self._queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        self.spans: list[Span] = []
+        self._queue: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         self._start = _now_ms()
 
     # -- span lifecycle ----------------------------------------------------- #
 
-    def start_span(self, name: str, kind: SpanKind, parent_id: Optional[str] = None,
+    def start_span(self, name: str, kind: SpanKind, parent_id: str | None = None,
                    **attributes: Any) -> Span:
         span = Span(name=name, kind=kind, parent_id=parent_id, attributes=dict(attributes))
         self.spans.append(span)
@@ -86,7 +86,7 @@ class Tracer:
         return span
 
     def end_span(self, span: Span, status: SpanStatus = SpanStatus.OK,
-                 error: Optional[str] = None, tokens: int = 0, **attributes: Any) -> None:
+                 error: str | None = None, tokens: int = 0, **attributes: Any) -> None:
         span.end_ms = _now_ms()
         span.status = status
         span.error = error
@@ -104,7 +104,7 @@ class Tracer:
     def _emit(self, event_type: str, span: Span) -> None:
         self._safe_put({"type": event_type, "trace_id": self.trace_id, "span": span.to_dict()})
 
-    def _safe_put(self, event: Dict[str, Any]) -> None:
+    def _safe_put(self, event: dict[str, Any]) -> None:
         try:
             self._queue.put_nowait(event)
         except Exception:
@@ -125,7 +125,7 @@ class Tracer:
 
     # -- summary ------------------------------------------------------------ #
 
-    def summary(self) -> Dict[str, Any]:
+    def summary(self) -> dict[str, Any]:
         total_tokens = sum(s.tokens for s in self.spans)
         return {
             "trace_id": self.trace_id,

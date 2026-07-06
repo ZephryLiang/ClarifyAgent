@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from ..domain import parse_job_text, parse_resume_text
 from ..gateway.base import Message
@@ -38,7 +37,7 @@ class InterviewSession:
     resume_text: str = ""
     job_text: str = ""
     language: str = "zh"
-    turns: List[InterviewTurn] = field(default_factory=list)
+    turns: list[InterviewTurn] = field(default_factory=list)
     finished: bool = False
     max_questions: int = 6
 
@@ -62,11 +61,11 @@ class InterviewSession:
 
 
 class MockInterviewer:
-    def __init__(self, gateway: Optional[Gateway] = None) -> None:
+    def __init__(self, gateway: Gateway | None = None) -> None:
         self.gateway = gateway
-        self._sessions: Dict[str, InterviewSession] = {}
+        self._sessions: dict[str, InterviewSession] = {}
 
-    def get(self, session_id: str) -> Optional[InterviewSession]:
+    def get(self, session_id: str) -> InterviewSession | None:
         return self._sessions.get(session_id)
 
     def create(self, resume_text: str, job_text: str, language: str = "zh",
@@ -76,7 +75,7 @@ class MockInterviewer:
         self._sessions[session.id] = session
         return session
 
-    async def ask_next(self, session: InterviewSession, tracer: Optional[Tracer] = None) -> str:
+    async def ask_next(self, session: InterviewSession, tracer: Tracer | None = None) -> str:
         """Produce the next interviewer question and append it to the session."""
 
         tracer = tracer or Tracer()
@@ -105,9 +104,10 @@ class MockInterviewer:
         session.turns.append(InterviewTurn("candidate", answer))
 
     async def _ask_llm(self, session: InterviewSession, tracer: Tracer, parent_id: str) -> str:
+        assert self.gateway is not None
         agent = Agent(self.gateway, ToolRegistry(), tracer, system=_SYSTEM,
                       name="interviewer", temperature=0.6, parent_span_id=parent_id)
-        history: List[Message] = []
+        history: list[Message] = []
         for t in session.turns:
             role = "assistant" if t.role == "interviewer" else "user"
             history.append(Message(role=role, content=t.content))
@@ -123,7 +123,7 @@ class MockInterviewer:
         resume = parse_resume_text(session.resume_text)
         job = parse_job_text(session.job_text)
         idx = session.question_count
-        bank: List[str] = [
+        bank: list[str] = [
             f"请先做个自我介绍，并说明你为什么适合「{job.title or '这个岗位'}」？",
         ]
         for skill in (job.required_skills or resume.skills)[:3]:

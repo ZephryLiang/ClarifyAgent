@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import List, Optional
 
 from ..gateway.registry import Gateway
 from .agent import Agent, AgentResult
@@ -23,7 +22,7 @@ class SubagentTask:
     name: str
     prompt: str
     system: str = ""
-    tool_names: Optional[List[str]] = None  # None => all tools; [] => no tools
+    tool_names: list[str] | None = None  # None => all tools; [] => no tools
     temperature: float = 0.3
 
 
@@ -32,21 +31,21 @@ class SubagentOutcome:
     name: str
     output: str
     ok: bool = True
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class Orchestrator:
     """Runs subagents in parallel under a shared tracer."""
 
-    def __init__(self, gateway: Gateway, tools: ToolRegistry, tracer: Optional[Tracer] = None,
+    def __init__(self, gateway: Gateway, tools: ToolRegistry, tracer: Tracer | None = None,
                  max_iterations: int = 5) -> None:
         self.gateway = gateway
         self.tools = tools
         self.tracer = tracer or Tracer()
         self.max_iterations = max_iterations
 
-    async def run_parallel(self, tasks: List[SubagentTask],
-                           parent_span_id: Optional[str] = None) -> List[SubagentOutcome]:
+    async def run_parallel(self, tasks: list[SubagentTask],
+                           parent_span_id: str | None = None) -> list[SubagentOutcome]:
         group = self.tracer.start_span("parallel-subagents", SpanKind.AGENT, parent_span_id,
                                        count=len(tasks), tasks=[t.name for t in tasks])
 

@@ -10,7 +10,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
 
 # Repository / package paths.
 APP_DIR = Path(__file__).resolve().parent
@@ -30,8 +29,8 @@ class ProviderConfig:
     protocol: str  # "openai" | "anthropic"
     model: str
     api_key_env: str
-    base_url: Optional[str] = None
-    api_key: Optional[str] = None  # resolved at load time
+    base_url: str | None = None
+    api_key: str | None = None  # resolved at load time
 
     @property
     def enabled(self) -> bool:
@@ -41,7 +40,7 @@ class ProviderConfig:
 # Built-in provider catalogue. Each entry is enabled automatically when its
 # API-key environment variable is present. base_url values point at the public
 # OpenAI-compatible / Anthropic endpoints; override via env if you use a gateway.
-_DEFAULT_PROVIDERS: List[ProviderConfig] = [
+_DEFAULT_PROVIDERS: list[ProviderConfig] = [
     ProviderConfig("openai", "openai", os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
                    "OPENAI_API_KEY", os.getenv("OPENAI_BASE_URL")),
     ProviderConfig("anthropic", "anthropic", os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
@@ -60,32 +59,32 @@ _DEFAULT_PROVIDERS: List[ProviderConfig] = [
 
 @dataclass
 class Settings:
-    providers: List[ProviderConfig] = field(default_factory=list)
+    providers: list[ProviderConfig] = field(default_factory=list)
     # Ordered preference for routing; first enabled provider wins by default.
-    provider_priority: List[str] = field(default_factory=lambda: _priority_list())
-    default_provider: Optional[str] = field(default=os.getenv("JOBSEEKER_PROVIDER"))
+    provider_priority: list[str] = field(default_factory=lambda: _priority_list())
+    default_provider: str | None = field(default=os.getenv("JOBSEEKER_PROVIDER"))
     max_tool_iterations: int = int(os.getenv("JOBSEEKER_MAX_ITERATIONS", "8"))
     request_timeout: float = float(os.getenv("JOBSEEKER_TIMEOUT", "60"))
-    mcp_config_path: Optional[str] = os.getenv("JOBSEEKER_MCP_CONFIG")
+    mcp_config_path: str | None = os.getenv("JOBSEEKER_MCP_CONFIG")
 
-    def enabled_providers(self) -> List[ProviderConfig]:
+    def enabled_providers(self) -> list[ProviderConfig]:
         return [p for p in self.providers if p.enabled]
 
-    def get_provider(self, name: str) -> Optional[ProviderConfig]:
+    def get_provider(self, name: str) -> ProviderConfig | None:
         for p in self.providers:
             if p.name == name:
                 return p
         return None
 
-    def resolved_priority(self) -> List[ProviderConfig]:
+    def resolved_priority(self) -> list[ProviderConfig]:
         """Enabled providers ordered by preference then catalogue order."""
 
-        order: Dict[str, int] = {n: i for i, n in enumerate(self.provider_priority)}
+        order: dict[str, int] = {n: i for i, n in enumerate(self.provider_priority)}
         enabled = self.enabled_providers()
         return sorted(enabled, key=lambda p: order.get(p.name, 999))
 
 
-def _priority_list() -> List[str]:
+def _priority_list() -> list[str]:
     raw = os.getenv("JOBSEEKER_PROVIDER_PRIORITY")
     if raw:
         return [x.strip() for x in raw.split(",") if x.strip()]
@@ -93,7 +92,7 @@ def _priority_list() -> List[str]:
 
 
 def load_settings() -> Settings:
-    providers: List[ProviderConfig] = []
+    providers: list[ProviderConfig] = []
     for p in _DEFAULT_PROVIDERS:
         p.api_key = os.getenv(p.api_key_env)
         providers.append(p)

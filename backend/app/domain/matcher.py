@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import List, Set
-
 from .models import JobPosting, MatchResult, Resume
 from .skills import normalize_skills
 
@@ -16,11 +14,11 @@ _REQUIRED_WEIGHT = 0.8
 _PREFERRED_WEIGHT = 0.2
 
 
-def _skill_set(skills: List[str]) -> Set[str]:
+def _skill_set(skills: list[str]) -> set[str]:
     return {s.lower() for s in normalize_skills(skills)}
 
 
-def _coverage(candidate: Set[str], target: List[str]) -> float:
+def _coverage(candidate: set[str], target: list[str]) -> float:
     if not target:
         return 1.0
     target_set = {s.lower() for s in target}
@@ -57,7 +55,7 @@ def compute_match(resume: Resume, job: JobPosting) -> MatchResult:
     missing_required = [s for s in required if s.lower() not in candidate]
     missing_preferred = [s for s in preferred if s.lower() not in candidate]
 
-    strengths: List[str] = []
+    strengths: list[str] = []
     if matched:
         strengths.append("覆盖岗位技能: " + ", ".join(matched))
     if job.min_years and resume.years_experience >= job.min_years:
@@ -68,7 +66,7 @@ def compute_match(resume: Resume, job: JobPosting) -> MatchResult:
     if extra:
         strengths.append("额外技能: " + ", ".join(extra[:8]))
 
-    gaps: List[str] = []
+    gaps: list[str] = []
     if missing_required:
         gaps.append("缺少硬性技能: " + ", ".join(missing_required))
     if missing_preferred:

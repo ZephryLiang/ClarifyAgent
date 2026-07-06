@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..domain import compute_match, parse_job_text, parse_resume_text
 from ..gateway.registry import Gateway
@@ -25,7 +24,7 @@ _SYSTEM = """你是求职 Agent 的沟通专家。为候选人写一条在招聘
 @dataclass
 class OutreachResult:
     message: str = ""
-    variants: List[str] = field(default_factory=list)
+    variants: list[str] = field(default_factory=list)
     llm_used: bool = False
 
     def to_dict(self) -> dict:
@@ -33,11 +32,11 @@ class OutreachResult:
 
 
 class OutreachWriter:
-    def __init__(self, gateway: Optional[Gateway] = None) -> None:
+    def __init__(self, gateway: Gateway | None = None) -> None:
         self.gateway = gateway
 
     async def run(self, resume_text: str, job_text: str, style: str = "professional",
-                  tracer: Optional[Tracer] = None) -> OutreachResult:
+                  tracer: Tracer | None = None) -> OutreachResult:
         tracer = tracer or Tracer()
         span = tracer.start_span("outreach", SpanKind.AGENT, style=style,
                                  has_llm=llm_available(self.gateway))
@@ -47,6 +46,7 @@ class OutreachWriter:
             match = compute_match(resume, job)
 
             if llm_available(self.gateway):
+                assert self.gateway is not None
                 agent = Agent(self.gateway, ToolRegistry(), tracer, system=_SYSTEM,
                               name="outreach-writer", temperature=0.7, parent_span_id=span.id)
                 matched = "、".join(match.matched_skills[:4]) or "、".join(resume.skills[:4])

@@ -9,7 +9,6 @@ them into a qualitative report on top of the objective score.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..domain import compute_match, parse_job_text, parse_resume_text
 from ..domain.models import MatchResult
@@ -21,7 +20,7 @@ from .base import llm_available
 
 @dataclass
 class MatchReport:
-    match: Optional[MatchResult] = None
+    match: MatchResult | None = None
     analyses: dict = field(default_factory=dict)  # subagent name -> text
     synthesis: str = ""
     llm_used: bool = False
@@ -36,12 +35,12 @@ class MatchReport:
 
 
 class Matcher:
-    def __init__(self, gateway: Optional[Gateway] = None, tools: Optional[ToolRegistry] = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
 
     async def run(self, resume_text: str, job_text: str,
-                  tracer: Optional[Tracer] = None) -> MatchReport:
+                  tracer: Tracer | None = None) -> MatchReport:
         tracer = tracer or Tracer()
         span = tracer.start_span("matching", SpanKind.AGENT, has_llm=llm_available(self.gateway))
         try:
@@ -53,6 +52,7 @@ class Matcher:
                 tracer.end_span(span, SpanStatus.OK, mode="offline", score=match.score)
                 return MatchReport(match=match, synthesis=match.recommendation, llm_used=False)
 
+            assert self.gateway is not None
             orchestrator = Orchestrator(self.gateway, self.tools, tracer, max_iterations=4)
             company = job.company or "该公司"
             tasks = [
@@ -89,6 +89,7 @@ class Matcher:
                           tracer: Tracer, parent_id: str) -> str:
         from ..harness import Agent
 
+        assert self.gateway is not None
         agent = Agent(self.gateway, ToolRegistry(), tracer,
                       system="你是求职策略顾问，综合各方分析给出可执行的投递建议。",
                       name="match-synthesis", temperature=0.4, parent_span_id=parent_id)

@@ -1,5 +1,6 @@
 """Dual-protocol LLM gateway (OpenAI-compatible + Anthropic native)."""
 
+from .anthropic_adapter import AnthropicAdapter
 from .base import (
     ChatProvider,
     ChatResponse,
@@ -10,7 +11,6 @@ from .base import (
     Usage,
 )
 from .openai_adapter import OpenAIAdapter
-from .anthropic_adapter import AnthropicAdapter
 from .registry import Gateway, build_provider
 
 __all__ = [

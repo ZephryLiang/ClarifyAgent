@@ -4,19 +4,19 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Optional
+from typing import Any
 
 from ..gateway.registry import Gateway
 
 
-def llm_available(gateway: Optional[Gateway]) -> bool:
+def llm_available(gateway: Gateway | None) -> bool:
     return gateway is not None and gateway.available()
 
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```", re.DOTALL)
 
 
-def extract_json(text: str) -> Optional[Any]:
+def extract_json(text: str) -> Any | None:
     """Best-effort extraction of a JSON object/array from an LLM response.
 
     Handles fenced code blocks and leading/trailing prose. Returns ``None`` if

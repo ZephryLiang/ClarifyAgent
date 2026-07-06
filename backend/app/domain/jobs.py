@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional
 
 from .models import JobPosting
 from .skills import extract_skills, normalize_skills
 
-_SECTION_KEYWORDS: Dict[str, List[str]] = {
+_SECTION_KEYWORDS: dict[str, list[str]] = {
     "required_skills": [
         "requirements", "required", "qualifications", "must have",
         "任职要求", "岗位要求", "职位要求", "必备技能", "硬性要求",
@@ -34,7 +33,7 @@ _SENIORITY_KEYWORDS = {
 }
 
 
-def _match_section(line: str) -> Optional[str]:
+def _match_section(line: str) -> str | None:
     stripped = line.strip().lstrip("#").strip().rstrip(":：").strip().lower()
     if not stripped:
         return None
@@ -75,8 +74,8 @@ def parse_job_text(text: str) -> JobPosting:
         elif low.startswith(("location", "地点", "工作地点")):
             job.location = line.split(":", 1)[-1].split("：", 1)[-1].strip()
 
-    current: Optional[str] = None
-    buckets: Dict[str, List[str]] = {k: [] for k in _SECTION_KEYWORDS}
+    current: str | None = None
+    buckets: dict[str, list[str]] = {k: [] for k in _SECTION_KEYWORDS}
     for line in lines:
         section = _match_section(line)
         if section is not None:
@@ -123,7 +122,7 @@ def parse_job_json(data: str | dict) -> JobPosting:
 
 
 def load_job(path: str) -> JobPosting:
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         content = fh.read()
     if path.lower().endswith(".json"):
         return parse_job_json(content)

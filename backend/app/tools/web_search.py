@@ -9,13 +9,13 @@ Brave later means adding another ``SearchBackend`` and selecting it via config.
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Dict, List
+from typing import Any
 
 from ..harness.tools import Tool, ToolResult
 
 
 class WebSearchBackend:
-    def search(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:  # pragma: no cover
+    def search(self, query: str, max_results: int = 5) -> list[dict[str, str]]:  # pragma: no cover
         raise NotImplementedError
 
 
@@ -31,8 +31,8 @@ class DuckDuckGoBackend(WebSearchBackend):
             except ImportError:
                 return False
 
-    def search(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:
-        results: List[Dict[str, str]] = []
+    def search(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
+        results: list[dict[str, str]] = []
         ddgs_cls = None
         try:
             from ddgs import DDGS  # type: ignore
@@ -59,7 +59,7 @@ class WebSearchTool(Tool):
         "在互联网上搜索信息（公司背景、行业动态、真实面经、职位信息等）。"
         "返回标题、链接和摘要。用于需要外部实时信息的场景。"
     )
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "query": {"type": "string", "description": "搜索关键词/查询语句"},
@@ -71,7 +71,7 @@ class WebSearchTool(Tool):
     def __init__(self, backend: WebSearchBackend | None = None) -> None:
         self.backend = backend or DuckDuckGoBackend()
 
-    async def run(self, query: str, max_results: int = 5) -> ToolResult:
+    async def run(self, query: str, max_results: int = 5, **_: Any) -> ToolResult:  # type: ignore[override]
         loop = asyncio.get_event_loop()
         try:
             results = await loop.run_in_executor(

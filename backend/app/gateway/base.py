@@ -8,7 +8,7 @@ Tool-calling in particular differs between the two vendors and is unified here.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -17,7 +17,7 @@ class ToolSpec:
 
     name: str
     description: str
-    parameters: Dict[str, Any] = field(default_factory=lambda: {"type": "object", "properties": {}})
+    parameters: dict[str, Any] = field(default_factory=lambda: {"type": "object", "properties": {}})
 
 
 @dataclass
@@ -26,7 +26,7 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -40,9 +40,9 @@ class Message:
 
     role: str
     content: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
-    tool_call_id: Optional[str] = None
-    name: Optional[str] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    tool_call_id: str | None = None
+    name: str | None = None
 
 
 @dataclass
@@ -55,7 +55,7 @@ class Usage:
 @dataclass
 class ChatResponse:
     content: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
+    tool_calls: list[ToolCall] = field(default_factory=list)
     finish_reason: str = "stop"  # "stop" | "tool_calls" | "length" | "error"
     usage: Usage = field(default_factory=Usage)
     provider: str = ""
@@ -79,11 +79,11 @@ class ChatProvider:
 
     def chat(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolSpec]] = None,
+        messages: list[Message],
+        tools: list[ToolSpec] | None = None,
         temperature: float = 0.4,
         max_tokens: int = 2048,
-        system: Optional[str] = None,
+        system: str | None = None,
     ) -> ChatResponse:  # pragma: no cover - interface
         raise NotImplementedError
 

@@ -9,11 +9,11 @@ to extend — add new canonical skills or aliases and the whole pipeline benefit
 from __future__ import annotations
 
 import re
-from typing import Dict, Iterable, List
+from collections.abc import Iterable
 
 # Canonical skill -> list of aliases (all matched case-insensitively).
 # The canonical name is what we surface to the user.
-SKILL_ALIASES: Dict[str, List[str]] = {
+SKILL_ALIASES: dict[str, list[str]] = {
     "Python": ["python", "py"],
     "Java": ["java"],
     "JavaScript": ["javascript", "js", "es6"],
@@ -67,7 +67,7 @@ SKILL_ALIASES: Dict[str, List[str]] = {
 }
 
 # Precompute alias -> canonical for fast lookup.
-_ALIAS_TO_CANONICAL: Dict[str, str] = {}
+_ALIAS_TO_CANONICAL: dict[str, str] = {}
 for _canonical, _aliases in SKILL_ALIASES.items():
     _ALIAS_TO_CANONICAL[_canonical.lower()] = _canonical
     for _alias in _aliases:
@@ -87,18 +87,18 @@ def _alias_pattern(alias: str) -> re.Pattern:
 
 
 # Cache compiled patterns keyed by alias.
-_PATTERN_CACHE: Dict[str, re.Pattern] = {
+_PATTERN_CACHE: dict[str, re.Pattern] = {
     alias: _alias_pattern(alias) for alias in _ALIAS_TO_CANONICAL
 }
 
 
-def extract_skills(text: str) -> List[str]:
+def extract_skills(text: str) -> list[str]:
     """Return the canonical skills detected in ``text`` (order preserved)."""
 
     if not text:
         return []
 
-    found: Dict[str, None] = {}
+    found: dict[str, None] = {}
     for alias, canonical in _ALIAS_TO_CANONICAL.items():
         pattern = _PATTERN_CACHE[alias]
         if pattern.search(text):
@@ -106,14 +106,14 @@ def extract_skills(text: str) -> List[str]:
     return list(found.keys())
 
 
-def normalize_skills(skills: Iterable[str]) -> List[str]:
+def normalize_skills(skills: Iterable[str]) -> list[str]:
     """Map an iterable of arbitrary skill strings onto canonical names.
 
     Unknown skills are kept as-is (title-stripped) so that user-provided skills
     are never silently dropped.
     """
 
-    result: Dict[str, None] = {}
+    result: dict[str, None] = {}
     for skill in skills:
         if not skill:
             continue
@@ -123,7 +123,7 @@ def normalize_skills(skills: Iterable[str]) -> List[str]:
     return list(result.keys())
 
 
-def known_skills() -> List[str]:
+def known_skills() -> list[str]:
     """Return the list of canonical skills the taxonomy understands."""
 
     return sorted(SKILL_ALIASES.keys())

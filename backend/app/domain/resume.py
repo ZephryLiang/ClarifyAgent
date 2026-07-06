@@ -13,13 +13,12 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional
 
 from .models import Resume
 from .skills import extract_skills, normalize_skills
 
 # Section header keywords mapped onto the Resume field they populate.
-_SECTION_KEYWORDS: Dict[str, List[str]] = {
+_SECTION_KEYWORDS: dict[str, list[str]] = {
     "summary": ["summary", "profile", "about", "简介", "自我评价", "个人简介"],
     "skills": ["skills", "technical skills", "技能", "技术栈", "专业技能"],
     "experiences": ["experience", "work experience", "employment", "经历", "工作经历", "项目经历"],
@@ -32,7 +31,7 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _PHONE_RE = re.compile(r"(?:(?:\+?\d{1,3}[\s-]?)?(?:\d[\s-]?){7,12}\d)")
 
 
-def _match_section(line: str) -> Optional[str]:
+def _match_section(line: str) -> str | None:
     stripped = line.strip().lstrip("#").strip().rstrip(":：").strip().lower()
     if not stripped:
         return None
@@ -61,8 +60,8 @@ def parse_resume_text(text: str) -> Resume:
     if len(non_empty) > 1 and _match_section(non_empty[1]) is None:
         resume.title = non_empty[1]
 
-    current: Optional[str] = None
-    buckets: Dict[str, List[str]] = {k: [] for k in _SECTION_KEYWORDS}
+    current: str | None = None
+    buckets: dict[str, list[str]] = {k: [] for k in _SECTION_KEYWORDS}
 
     for line in lines:
         section = _match_section(line)
@@ -82,7 +81,7 @@ def parse_resume_text(text: str) -> Resume:
 
     # Skills: explicit skills section (comma/、 separated) + skills mined from
     # the entire document.
-    explicit: List[str] = []
+    explicit: list[str] = []
     for entry in buckets["skills"]:
         explicit.extend(re.split(r"[,，、/|]", entry))
     mined = extract_skills(text)
@@ -93,7 +92,7 @@ def parse_resume_text(text: str) -> Resume:
     if years:
         resume.years_experience = max(years)
 
-    contact: Dict[str, str] = {}
+    contact: dict[str, str] = {}
     email = _EMAIL_RE.search(text)
     if email:
         contact["email"] = email.group(0)
@@ -118,7 +117,7 @@ def parse_resume_json(data: str | dict) -> Resume:
 def load_resume(path: str) -> Resume:
     """Load a resume from ``path`` (``.json`` uses the JSON parser)."""
 
-    with open(path, "r", encoding="utf-8") as fh:
+    with open(path, encoding="utf-8") as fh:
         content = fh.read()
     if path.lower().endswith(".json"):
         return parse_resume_json(content)

@@ -7,9 +7,8 @@ and dependency-injected so tests can build a service with fakes.
 
 from __future__ import annotations
 
-from typing import List, Optional
-
-from .config import Settings, settings as default_settings
+from .config import Settings
+from .config import settings as default_settings
 from .gateway.registry import Gateway
 from .harness import ToolRegistry, Tracer
 from .mcp import MCPManager
@@ -17,17 +16,17 @@ from .modules import (
     Matcher,
     MockInterviewer,
     OutreachWriter,
-    Retrospective,
     ResumeRewriter,
+    Retrospective,
 )
 from .storage import Store
 from .tools import build_registry
 
 
 class AppServices:
-    def __init__(self, settings: Optional[Settings] = None,
-                 gateway: Optional[Gateway] = None,
-                 store: Optional[Store] = None) -> None:
+    def __init__(self, settings: Settings | None = None,
+                 gateway: Gateway | None = None,
+                 store: Store | None = None) -> None:
         self.settings = settings or default_settings
         self.gateway = gateway or Gateway(self.settings)
         self.tools: ToolRegistry = build_registry()
@@ -39,9 +38,9 @@ class AppServices:
         self.outreach = OutreachWriter(self.gateway)
         self.interviewer = MockInterviewer(self.gateway)
         self.retrospective = Retrospective(self.gateway, self.tools)
-        self._mcp_notes: List[str] = []
+        self._mcp_notes: list[str] = []
 
-    async def connect_mcp(self) -> List[str]:
+    async def connect_mcp(self) -> list[str]:
         """Connect configured MCP servers and merge their tools into the registry."""
 
         self._mcp_notes = await self.mcp.connect()

@@ -7,8 +7,9 @@ implement the same interface, so the agent loop treats them uniformly.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any
 
 from ..gateway.base import ToolSpec
 
@@ -29,7 +30,7 @@ class Tool:
 
     name: str = ""
     description: str = ""
-    parameters: Dict[str, Any] = {"type": "object", "properties": {}}
+    parameters: dict[str, Any] = {"type": "object", "properties": {}}
 
     def spec(self) -> ToolSpec:
         return ToolSpec(name=self.name, description=self.description, parameters=self.parameters)
@@ -41,7 +42,7 @@ class Tool:
 class FunctionTool(Tool):
     """Wrap a plain function as a tool (handy for quick/built-in tools)."""
 
-    def __init__(self, name: str, description: str, parameters: Dict[str, Any],
+    def __init__(self, name: str, description: str, parameters: dict[str, Any],
                  func: Callable[..., Any]) -> None:
         self.name = name
         self.description = description
@@ -62,8 +63,8 @@ class FunctionTool(Tool):
 class ToolRegistry:
     """A collection of tools available to an agent."""
 
-    def __init__(self, tools: Optional[List[Tool]] = None) -> None:
-        self._tools: Dict[str, Tool] = {}
+    def __init__(self, tools: list[Tool] | None = None) -> None:
+        self._tools: dict[str, Tool] = {}
         for t in tools or []:
             self.register(t)
 
@@ -72,16 +73,16 @@ class ToolRegistry:
             raise ValueError("tool must have a name")
         self._tools[tool.name] = tool
 
-    def get(self, name: str) -> Optional[Tool]:
+    def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
-    def specs(self) -> List[ToolSpec]:
+    def specs(self) -> list[ToolSpec]:
         return [t.spec() for t in self._tools.values()]
 
-    def names(self) -> List[str]:
+    def names(self) -> list[str]:
         return list(self._tools.keys())
 
-    def subset(self, names: List[str]) -> "ToolRegistry":
+    def subset(self, names: list[str]) -> ToolRegistry:
         return ToolRegistry([self._tools[n] for n in names if n in self._tools])
 
     def __len__(self) -> int:

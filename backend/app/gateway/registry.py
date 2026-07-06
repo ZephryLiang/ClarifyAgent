@@ -8,9 +8,10 @@ next enabled provider (across protocols) when one errors out.
 from __future__ import annotations
 
 import time
-from typing import Callable, List, Optional
+from collections.abc import Callable
 
-from ..config import ProviderConfig, Settings, settings as default_settings
+from ..config import ProviderConfig, Settings
+from ..config import settings as default_settings
 from .anthropic_adapter import AnthropicAdapter
 from .base import ChatProvider, ChatResponse, Message, ProviderError, ToolSpec
 from .openai_adapter import OpenAIAdapter
@@ -36,8 +37,8 @@ class Gateway:
 
     def __init__(
         self,
-        settings: Optional[Settings] = None,
-        providers: Optional[List[ChatProvider]] = None,
+        settings: Settings | None = None,
+        providers: list[ChatProvider] | None = None,
         max_retries: int = 2,
     ) -> None:
         self.settings = settings or default_settings
@@ -51,13 +52,13 @@ class Gateway:
             ]
 
     @property
-    def providers(self) -> List[ChatProvider]:
+    def providers(self) -> list[ChatProvider]:
         return self._providers
 
     def available(self) -> bool:
         return any(p.available() for p in self._providers)
 
-    def _ordered(self, prefer: Optional[str]) -> List[ChatProvider]:
+    def _ordered(self, prefer: str | None) -> list[ChatProvider]:
         usable = [p for p in self._providers if p.available()]
         if prefer:
             usable.sort(key=lambda p: 0 if p.name == prefer else 1)
@@ -65,13 +66,13 @@ class Gateway:
 
     def chat(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolSpec]] = None,
+        messages: list[Message],
+        tools: list[ToolSpec] | None = None,
         temperature: float = 0.4,
         max_tokens: int = 2048,
-        system: Optional[str] = None,
-        prefer: Optional[str] = None,
-        on_attempt: Optional[Callable[[str, Optional[Exception]], None]] = None,
+        system: str | None = None,
+        prefer: str | None = None,
+        on_attempt: Callable[[str, Exception | None], None] | None = None,
     ) -> ChatResponse:
         """Call the first working provider, failing over on error.
 
@@ -83,7 +84,7 @@ class Gateway:
         if not candidates:
             raise ProviderError("no LLM provider is configured/available")
 
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for provider in candidates:
             for attempt in range(self.max_retries + 1):
                 try:
@@ -101,7 +102,7 @@ class Gateway:
                     continue
         raise ProviderError(f"all providers failed; last error: {last_error}")
 
-    def describe(self) -> List[dict]:
+    def describe(self) -> list[dict]:
         return [
             {"name": p.name, "protocol": p.protocol, "model": p.model, "available": p.available()}
             for p in self._providers

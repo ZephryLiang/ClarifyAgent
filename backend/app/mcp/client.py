@@ -24,12 +24,12 @@ from __future__ import annotations
 import json
 from contextlib import AsyncExitStack
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..harness.tools import Tool, ToolResult
 
 
-def load_mcp_config(path: str | Path) -> Dict[str, Dict[str, Any]]:
+def load_mcp_config(path: str | Path) -> dict[str, dict[str, Any]]:
     """Read an ``mcpServers`` config file and return the server map."""
 
     p = Path(path)
@@ -42,8 +42,8 @@ def load_mcp_config(path: str | Path) -> Dict[str, Dict[str, Any]]:
 class MCPTool(Tool):
     """Wraps a single remote MCP tool behind our :class:`Tool` interface."""
 
-    def __init__(self, manager: "MCPManager", server: str, name: str,
-                 description: str, parameters: Dict[str, Any]) -> None:
+    def __init__(self, manager: MCPManager, server: str, name: str,
+                 description: str, parameters: dict[str, Any]) -> None:
         # Namespace the tool so multiple servers can expose same-named tools.
         self.name = f"{server}__{name}"
         self.remote_name = name
@@ -59,14 +59,14 @@ class MCPTool(Tool):
 class MCPManager:
     """Connects to configured MCP servers and surfaces their tools."""
 
-    def __init__(self, config: Optional[Dict[str, Dict[str, Any]]] = None) -> None:
+    def __init__(self, config: dict[str, dict[str, Any]] | None = None) -> None:
         self.config = config or {}
-        self._stack: Optional[AsyncExitStack] = None
-        self._sessions: Dict[str, Any] = {}
-        self._tools: List[MCPTool] = []
+        self._stack: AsyncExitStack | None = None
+        self._sessions: dict[str, Any] = {}
+        self._tools: list[MCPTool] = []
 
     @classmethod
-    def from_path(cls, path: Optional[str | Path]) -> "MCPManager":
+    def from_path(cls, path: str | Path | None) -> MCPManager:
         if not path:
             return cls({})
         return cls(load_mcp_config(path))
@@ -78,10 +78,10 @@ class MCPManager:
         except ImportError:
             return False
 
-    async def connect(self) -> List[str]:
+    async def connect(self) -> list[str]:
         """Connect to all configured servers. Returns notes for observability."""
 
-        notes: List[str] = []
+        notes: list[str] = []
         if not self.config:
             return ["未配置 MCP server"]
         if not self.sdk_available():
@@ -113,13 +113,13 @@ class MCPManager:
                 notes.append(f"连接 MCP '{server}' 失败: {exc}")
         return notes
 
-    async def call_tool(self, server: str, name: str, arguments: Dict[str, Any]) -> ToolResult:
+    async def call_tool(self, server: str, name: str, arguments: dict[str, Any]) -> ToolResult:
         session = self._sessions.get(server)
         if session is None:
             return ToolResult(content=f"MCP server '{server}' 未连接", is_error=True)
         try:
             result = await session.call_tool(name, arguments)
-            parts: List[str] = []
+            parts: list[str] = []
             for block in getattr(result, "content", []) or []:
                 text = getattr(block, "text", None)
                 if text:
@@ -129,7 +129,7 @@ class MCPManager:
         except Exception as exc:  # noqa: BLE001
             return ToolResult(content=f"MCP 调用失败: {exc}", is_error=True)
 
-    def tools(self) -> List[MCPTool]:
+    def tools(self) -> list[MCPTool]:
         return list(self._tools)
 
     async def aclose(self) -> None:

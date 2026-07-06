@@ -1,9 +1,9 @@
 """Feature modules: resume rewrite, matching, outreach, interview, retrospective."""
 
 from .interview import InterviewSession, InterviewTurn, MockInterviewer
-from .matching import MatchReport, Matcher
+from .matching import Matcher, MatchReport
 from .outreach import OutreachResult, OutreachWriter
-from .resume_rewrite import ResumeRewriteResult, ResumeRewriter, RewriteSuggestion
+from .resume_rewrite import ResumeRewriter, ResumeRewriteResult, RewriteSuggestion
 from .retrospective import Retrospective, RetrospectiveResult
 
 __all__ = [

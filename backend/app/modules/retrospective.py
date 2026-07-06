@@ -9,7 +9,6 @@ for the target company/role to sharpen the feedback.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..gateway.registry import Gateway
 from ..harness import Agent, ToolRegistry, Tracer
@@ -33,12 +32,12 @@ _SYSTEM = """你是资深面试教练，负责面试复盘。请客观、具体�
 @dataclass
 class RetrospectiveResult:
     overall: str = ""
-    strengths: List[str] = field(default_factory=list)
-    weaknesses: List[str] = field(default_factory=list)
-    missed_points: List[str] = field(default_factory=list)
-    model_answers: List[dict] = field(default_factory=list)
-    improvement_plan: List[str] = field(default_factory=list)
-    references: List[str] = field(default_factory=list)
+    strengths: list[str] = field(default_factory=list)
+    weaknesses: list[str] = field(default_factory=list)
+    missed_points: list[str] = field(default_factory=list)
+    model_answers: list[dict] = field(default_factory=list)
+    improvement_plan: list[str] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
     llm_used: bool = False
 
     def to_dict(self) -> dict:
@@ -55,12 +54,12 @@ class RetrospectiveResult:
 
 
 class Retrospective:
-    def __init__(self, gateway: Optional[Gateway] = None, tools: Optional[ToolRegistry] = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
 
     async def run(self, transcript: str, job_text: str = "", company: str = "",
-                  tracer: Optional[Tracer] = None) -> RetrospectiveResult:
+                  tracer: Tracer | None = None) -> RetrospectiveResult:
         tracer = tracer or Tracer()
         span = tracer.start_span("retrospective", SpanKind.AGENT,
                                  has_llm=llm_available(self.gateway))
@@ -70,6 +69,7 @@ class Retrospective:
                 tracer.end_span(span, SpanStatus.OK, mode="offline")
                 return result
 
+            assert self.gateway is not None
             tools = self.tools.subset(["web_search"]) if self.tools else ToolRegistry()
             agent = Agent(self.gateway, tools, tracer, system=_SYSTEM,
                           name="retrospective", temperature=0.4, parent_span_id=span.id)

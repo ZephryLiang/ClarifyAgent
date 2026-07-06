@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 from ..domain import parse_resume_text
 from ..gateway.registry import Gateway
@@ -45,9 +44,9 @@ _SYSTEM = """你是求职 Agent 的简历改写专家。你必须严格遵守知
 class RewriteSuggestion:
     original: str
     rewritten: str
-    principles: List[str] = field(default_factory=list)
-    needs_input: List[str] = field(default_factory=list)
-    faithfulness: Optional[FaithfulnessReport] = None
+    principles: list[str] = field(default_factory=list)
+    needs_input: list[str] = field(default_factory=list)
+    faithfulness: FaithfulnessReport | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -61,7 +60,7 @@ class RewriteSuggestion:
 
 @dataclass
 class ResumeRewriteResult:
-    suggestions: List[RewriteSuggestion] = field(default_factory=list)
+    suggestions: list[RewriteSuggestion] = field(default_factory=list)
     llm_used: bool = False
     summary: str = ""
 
@@ -73,10 +72,10 @@ class ResumeRewriteResult:
         }
 
 
-def extract_bullets(resume_text: str) -> List[str]:
+def extract_bullets(resume_text: str) -> list[str]:
     """Pull rewrite-worthy bullet lines from resume text."""
 
-    bullets: List[str] = []
+    bullets: list[str] = []
     for line in resume_text.splitlines():
         stripped = line.strip()
         cleaned = stripped.lstrip("-*•·").strip()
@@ -95,12 +94,12 @@ def extract_bullets(resume_text: str) -> List[str]:
 
 
 class ResumeRewriter:
-    def __init__(self, gateway: Optional[Gateway] = None, tools: Optional[ToolRegistry] = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
 
-    async def run(self, resume_text: str, job_text: Optional[str] = None,
-                  tracer: Optional[Tracer] = None) -> ResumeRewriteResult:
+    async def run(self, resume_text: str, job_text: str | None = None,
+                  tracer: Tracer | None = None) -> ResumeRewriteResult:
         tracer = tracer or Tracer()
         span = tracer.start_span("resume_rewrite", SpanKind.AGENT,
                                  has_llm=llm_available(self.gateway))
@@ -119,8 +118,9 @@ class ResumeRewriter:
             tracer.end_span(span, SpanStatus.ERROR, error=str(exc))
             raise
 
-    async def _run_llm(self, resume_text: str, job_text: Optional[str],
+    async def _run_llm(self, resume_text: str, job_text: str | None,
                        tracer: Tracer, parent_id: str) -> ResumeRewriteResult:
+        assert self.gateway is not None  # guaranteed by llm_available() check
         # Restrict to KB tools so the agent grounds via grep/read.
         kb_tools = self.tools.subset(["kb_list", "kb_grep", "kb_read"]) if self.tools else ToolRegistry()
         agent = Agent(self.gateway, kb_tools, tracer, system=_SYSTEM,
@@ -130,7 +130,7 @@ class ResumeRewriter:
             prompt += "\n\n目标岗位 JD（用于对齐关键词，但不得虚构技能）：\n" + job_text
         result = await agent.run(prompt)
         data = extract_json(result.output) or {}
-        suggestions: List[RewriteSuggestion] = []
+        suggestions: list[RewriteSuggestion] = []
         for item in (data.get("suggestions", []) if isinstance(data, dict) else []):
             suggestions.append(RewriteSuggestion(
                 original=str(item.get("original", "")),
@@ -150,10 +150,10 @@ class ResumeRewriter:
         bullets = parsed.experiences + parsed.highlights
         if not bullets:
             bullets = extract_bullets(resume_text)
-        suggestions: List[RewriteSuggestion] = []
+        suggestions: list[RewriteSuggestion] = []
         for b in bullets:
-            principles: List[str] = []
-            needs: List[str] = []
+            principles: list[str] = []
+            needs: list[str] = []
             rewritten = b
 
             weak = next((w for w in _WEAK_VERBS if w in b.lower()), None)

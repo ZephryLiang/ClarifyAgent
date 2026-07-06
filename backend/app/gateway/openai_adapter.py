@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .base import (
     ChatProvider,
@@ -24,8 +24,8 @@ from .base import (
 class OpenAIAdapter(ChatProvider):
     protocol = "openai"
 
-    def __init__(self, name: str, model: str, api_key: Optional[str],
-                 base_url: Optional[str] = None, timeout: float = 60.0) -> None:
+    def __init__(self, name: str, model: str, api_key: str | None,
+                 base_url: str | None = None, timeout: float = 60.0) -> None:
         self.name = name
         self.model = model
         self.api_key = api_key
@@ -45,15 +45,15 @@ class OpenAIAdapter(ChatProvider):
             from openai import OpenAI  # type: ignore
         except ImportError:
             return None
-        kwargs: Dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout}
+        kwargs: dict[str, Any] = {"api_key": self.api_key, "timeout": self.timeout}
         if self.base_url:
             kwargs["base_url"] = self.base_url
         self._client = OpenAI(**kwargs)
         return self._client
 
     @staticmethod
-    def _to_openai_messages(messages: List[Message], system: Optional[str]) -> List[Dict[str, Any]]:
-        out: List[Dict[str, Any]] = []
+    def _to_openai_messages(messages: list[Message], system: str | None) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         if system:
             out.append({"role": "system", "content": system})
         for m in messages:
@@ -84,7 +84,7 @@ class OpenAIAdapter(ChatProvider):
         return out
 
     @staticmethod
-    def _to_openai_tools(tools: Optional[List[ToolSpec]]) -> Optional[List[Dict[str, Any]]]:
+    def _to_openai_tools(tools: list[ToolSpec] | None) -> list[dict[str, Any]] | None:
         if not tools:
             return None
         return [
@@ -104,7 +104,7 @@ class OpenAIAdapter(ChatProvider):
         if client is None:
             raise ProviderError(f"provider '{self.name}' is not available (missing openai SDK or key)")
 
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": self.model,
             "messages": self._to_openai_messages(messages, system),
             "temperature": temperature,
@@ -121,7 +121,7 @@ class OpenAIAdapter(ChatProvider):
 
         choice = resp.choices[0]
         msg = choice.message
-        tool_calls: List[ToolCall] = []
+        tool_calls: list[ToolCall] = []
         for tc in (getattr(msg, "tool_calls", None) or []):
             try:
                 args = json.loads(tc.function.arguments or "{}")

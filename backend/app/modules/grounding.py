@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import List
 
 # Numbers, percentages, currency, multipliers like "10x".
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|％|x|X|倍|k|K|w|W|万|亿|ms|s|QPS|TPS|GB|TB|MB)?")
@@ -27,7 +26,7 @@ class FaithfulnessIssue:
 @dataclass
 class FaithfulnessReport:
     ok: bool = True
-    issues: List[FaithfulnessIssue] = field(default_factory=list)
+    issues: list[FaithfulnessIssue] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -44,14 +43,14 @@ def _strip_placeholders(text: str) -> str:
     return _PLACEHOLDER_RE.sub(" ", text)
 
 
-def check_numbers(original: str, rewritten: str) -> List[FaithfulnessIssue]:
+def check_numbers(original: str, rewritten: str) -> list[FaithfulnessIssue]:
     """Flag numeric tokens in ``rewritten`` not present in ``original``."""
 
     original_numbers = {_normalize_number(t) for t in _NUMBER_RE.findall(original) if t.strip()}
     # Also keep bare digit sequences from the original for looser matching.
     original_digits = set(re.findall(r"\d+", original))
 
-    issues: List[FaithfulnessIssue] = []
+    issues: list[FaithfulnessIssue] = []
     scanned = _strip_placeholders(rewritten)
     for token in _NUMBER_RE.findall(scanned):
         token = token.strip()

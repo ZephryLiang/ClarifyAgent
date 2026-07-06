@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -50,13 +51,13 @@ async def _shutdown() -> None:
 # SSE helper
 # --------------------------------------------------------------------------- #
 
-def _sse(event: Dict[str, Any]) -> str:
+def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
 async def _stream_run(
     module: str,
-    input_data: Dict[str, Any],
+    input_data: dict[str, Any],
     runner: Callable[[Tracer], Awaitable[Any]],
 ) -> StreamingResponse:
     """Run ``runner`` while streaming its trace events, then emit the result."""
@@ -86,8 +87,8 @@ async def _stream_run(
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-async def _run_json(module: str, input_data: Dict[str, Any],
-                    runner: Callable[[Tracer], Awaitable[Any]]) -> Dict[str, Any]:
+async def _run_json(module: str, input_data: dict[str, Any],
+                    runner: Callable[[Tracer], Awaitable[Any]]) -> dict[str, Any]:
     tracer = services.new_tracer()
     result = await runner(tracer)
     result_dict = result.to_dict() if hasattr(result, "to_dict") else result
@@ -100,22 +101,22 @@ async def _run_json(module: str, input_data: Dict[str, Any],
 # --------------------------------------------------------------------------- #
 
 @app.get("/api/health")
-async def health() -> Dict[str, str]:
+async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
 @app.get("/api/status")
-async def status() -> Dict[str, Any]:
+async def status() -> dict[str, Any]:
     return services.status()
 
 
 @app.get("/api/runs")
-async def list_runs(module: str | None = None, limit: int = 50) -> Dict[str, Any]:
+async def list_runs(module: str | None = None, limit: int = 50) -> dict[str, Any]:
     return {"runs": services.store.list_runs(module, limit)}
 
 
 @app.get("/api/runs/{run_id}")
-async def get_run(run_id: str) -> Dict[str, Any]:
+async def get_run(run_id: str) -> dict[str, Any]:
     run = services.store.get_run(run_id)
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
@@ -179,7 +180,7 @@ async def retrospective(req: RetrospectiveRequest):
 # -- Interview (turn-based JSON) -------------------------------------------- #
 
 @app.post("/api/interview/start")
-async def interview_start(req: InterviewStartRequest) -> Dict[str, Any]:
+async def interview_start(req: InterviewStartRequest) -> dict[str, Any]:
     session = services.interviewer.create(req.resume_text, req.job_text,
                                           req.language, req.max_questions)
     tracer = services.new_tracer()
@@ -189,7 +190,7 @@ async def interview_start(req: InterviewStartRequest) -> Dict[str, Any]:
 
 
 @app.post("/api/interview/answer")
-async def interview_answer(req: InterviewAnswerRequest) -> Dict[str, Any]:
+async def interview_answer(req: InterviewAnswerRequest) -> dict[str, Any]:
     session = services.interviewer.get(req.session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="session 不存在（可能服务已重启）")
@@ -202,7 +203,7 @@ async def interview_answer(req: InterviewAnswerRequest) -> Dict[str, Any]:
 
 
 @app.get("/api/interview/{session_id}")
-async def interview_get(session_id: str) -> Dict[str, Any]:
+async def interview_get(session_id: str) -> dict[str, Any]:
     session = services.interviewer.get(session_id)
     if session is not None:
         return session.to_dict()

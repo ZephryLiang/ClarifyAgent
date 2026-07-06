@@ -12,7 +12,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from ..config import DB_PATH
 
@@ -50,8 +50,8 @@ class Store:
 
     # -- runs --------------------------------------------------------------- #
 
-    def save_run(self, module: str, input_data: Dict[str, Any], result: Dict[str, Any],
-                 trace: Optional[Dict[str, Any]] = None) -> str:
+    def save_run(self, module: str, input_data: dict[str, Any], result: dict[str, Any],
+                 trace: dict[str, Any] | None = None) -> str:
         run_id = uuid.uuid4().hex[:12]
         trace_id = (trace or {}).get("trace_id")
         with self._lock:
@@ -66,12 +66,12 @@ class Store:
             self._conn.commit()
         return run_id
 
-    def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+    def get_run(self, run_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         return self._row_to_run(row) if row else None
 
-    def list_runs(self, module: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_runs(self, module: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         with self._lock:
             if module:
                 rows = self._conn.execute(
@@ -84,7 +84,7 @@ class Store:
         return [dict(r) for r in rows]
 
     @staticmethod
-    def _row_to_run(row: sqlite3.Row) -> Dict[str, Any]:
+    def _row_to_run(row: sqlite3.Row) -> dict[str, Any]:
         return {
             "id": row["id"],
             "trace_id": row["trace_id"],
@@ -97,7 +97,7 @@ class Store:
 
     # -- interview sessions ------------------------------------------------- #
 
-    def save_session(self, session_id: str, data: Dict[str, Any]) -> None:
+    def save_session(self, session_id: str, data: dict[str, Any]) -> None:
         with self._lock:
             self._conn.execute(
                 "INSERT INTO interview_sessions (id, updated_at, data_json) VALUES (?,?,?)"
@@ -106,7 +106,7 @@ class Store:
             )
             self._conn.commit()
 
-    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         with self._lock:
             row = self._conn.execute(
                 "SELECT data_json FROM interview_sessions WHERE id=?", (session_id,)).fetchone()

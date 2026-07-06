@@ -1,7 +1,8 @@
 """Built-in agent tools and registry factory."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import List, Optional
 
 from ..harness.tools import Tool, ToolRegistry
 from .builtins import SkillMatchTool
@@ -21,15 +22,15 @@ __all__ = [
 ]
 
 
-def build_builtin_tools(kb_root: Optional[Path] = None) -> List[Tool]:
+def build_builtin_tools(kb_root: Path | None = None) -> list[Tool]:
     """All dependency-light built-in tools."""
 
-    tools: List[Tool] = [WebSearchTool(), SkillMatchTool()]
+    tools: list[Tool] = [WebSearchTool(), SkillMatchTool()]
     tools.extend(build_kb_tools(kb_root))
     return tools
 
 
-def build_registry(extra: Optional[List[Tool]] = None, kb_root: Optional[Path] = None) -> ToolRegistry:
+def build_registry(extra: list[Tool] | None = None, kb_root: Path | None = None) -> ToolRegistry:
     registry = ToolRegistry(build_builtin_tools(kb_root))
     for t in extra or []:
         registry.register(t)

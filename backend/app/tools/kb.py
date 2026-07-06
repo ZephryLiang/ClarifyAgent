@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from ..config import KNOWLEDGE_BASE_DIR
 from ..harness.tools import Tool, ToolResult
@@ -29,7 +29,7 @@ def _safe_path(root: Path, rel: str) -> Path | None:
     return None
 
 
-def _iter_files(root: Path) -> List[Path]:
+def _iter_files(root: Path) -> list[Path]:
     if not root.exists():
         return []
     return sorted(p for p in root.rglob("*") if p.is_file() and p.suffix in {".md", ".txt"})
@@ -38,7 +38,7 @@ def _iter_files(root: Path) -> List[Path]:
 class KBListTool(Tool):
     name = "kb_list"
     description = "列出简历最佳实践知识库中的所有文档（文件名 + 首行标题）。先用它了解有哪些依据可查。"
-    parameters: Dict[str, Any] = {"type": "object", "properties": {}}
+    parameters: dict[str, Any] = {"type": "object", "properties": {}}
 
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or KNOWLEDGE_BASE_DIR
@@ -48,7 +48,7 @@ class KBListTool(Tool):
         if not files:
             return ToolResult(content="知识库为空。", data=[])
         lines = ["知识库文档:"]
-        listing: List[Dict[str, str]] = []
+        listing: list[dict[str, str]] = []
         for f in files:
             rel = f.relative_to(self.root).as_posix()
             title = ""
@@ -68,7 +68,7 @@ class KBGrepTool(Tool):
         "在简历最佳实践知识库中按关键词/正则搜索，返回匹配的『文件:行号: 内容』。"
         "用于快速定位相关依据（如 'quantify'、'STAR'、'action verb'、'量化'）。"
     )
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "pattern": {"type": "string", "description": "搜索关键词或正则表达式"},
@@ -80,13 +80,13 @@ class KBGrepTool(Tool):
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or KNOWLEDGE_BASE_DIR
 
-    async def run(self, pattern: str, max_results: int = 20) -> ToolResult:
+    async def run(self, pattern: str, max_results: int = 20, **_: Any) -> ToolResult:  # type: ignore[override]
         try:
             regex = re.compile(pattern, re.IGNORECASE)
         except re.error:
             regex = re.compile(re.escape(pattern), re.IGNORECASE)
 
-        matches: List[Dict[str, Any]] = []
+        matches: list[dict[str, Any]] = []
         for f in _iter_files(self.root):
             rel = f.relative_to(self.root).as_posix()
             try:
@@ -114,7 +114,7 @@ class KBReadTool(Tool):
         "读取知识库中某个文档的完整内容（带行号），用于获取可引用的最佳实践原文。"
         "引用时请注明『文件:行号』。"
     )
-    parameters: Dict[str, Any] = {
+    parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "kb_list 返回的文档相对路径"},
@@ -125,7 +125,7 @@ class KBReadTool(Tool):
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or KNOWLEDGE_BASE_DIR
 
-    async def run(self, path: str) -> ToolResult:
+    async def run(self, path: str, **_: Any) -> ToolResult:  # type: ignore[override]
         target = _safe_path(self.root, path)
         if target is None or not target.is_file():
             return ToolResult(content=f"文档不存在或路径非法: {path}", is_error=True)
@@ -137,5 +137,5 @@ class KBReadTool(Tool):
         return ToolResult(content=f"# {path}\n{numbered}", data={"path": path, "content": content})
 
 
-def build_kb_tools(root: Path | None = None) -> List[Tool]:
+def build_kb_tools(root: Path | None = None) -> list[Tool]:
     return [KBListTool(root), KBGrepTool(root), KBReadTool(root)]
