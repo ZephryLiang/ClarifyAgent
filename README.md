@@ -46,6 +46,9 @@
 - **治理(HITL + 审计)**：副作用工具(如 MCP 打招呼/投递)按 `auto/confirm/deny` 策略门控,人工批准后放行,全程写审计日志;CORS 收紧可配置。
 - **验证闭环 + LLM-as-judge**：简历改写「校验→自动修复→再校验」,把幻觉数字改成占位符;`/api/verify/judge` 对任意文本多维打分。
 - **上下文管理**：`ContextManager` 在预算内压缩较旧/超长消息(保留 tool-call 配对),长对话与多轮工具调用更稳。
+- **可观测归因**：`analyze_trace` 给出自耗时(排除子 span)/成本/失败根因(按 ETCLOVG 层),`/api/runs/{id}/attribution`。
+- **断点续传(durable execution)**：Agent 每轮 checkpoint,崩溃/中断后用同一 `checkpoint_id` 从上次续跑。
+- **轨迹级回放(evals)**：`/api/runs/{id}/replay` 用原输入重跑,对比工具调用轨迹与结果差异,做回归。
 - **优雅降级**：未配置任何 LLM key 时，全部功能走确定性离线引擎，依然可用。
 
 ## 🚀 快速开始

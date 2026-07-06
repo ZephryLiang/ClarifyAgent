@@ -9,8 +9,9 @@ import { Interview } from "./components/Interview";
 import { Retrospective } from "./components/Retrospective";
 import { MemoryPanel } from "./components/MemoryPanel";
 import { GovernancePanel } from "./components/GovernancePanel";
+import { EvalsPanel } from "./components/EvalsPanel";
 
-type Tab = "rewrite" | "match" | "outreach" | "interview" | "retro" | "memory" | "gov";
+type Tab = "rewrite" | "match" | "outreach" | "interview" | "retro" | "memory" | "gov" | "evals";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "rewrite", label: "简历改写", icon: "✍️" },
@@ -20,6 +21,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "retro", label: "面试复盘", icon: "🔍" },
   { id: "memory", label: "记忆 & 日报", icon: "🧠" },
   { id: "gov", label: "治理 & 校验", icon: "🛡️" },
+  { id: "evals", label: "评测 & 可观测", icon: "📊" },
 ];
 
 export default function App() {
@@ -107,6 +109,7 @@ export default function App() {
         )}
         {tab === "memory" && <MemoryPanel />}
         {tab === "gov" && <GovernancePanel />}
+        {tab === "evals" && <EvalsPanel />}
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 py-6 text-center text-xs text-slate-600">

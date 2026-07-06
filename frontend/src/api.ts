@@ -125,7 +125,44 @@ export const api = {
   },
   judge: (content: string, artifact_type: string) =>
     post<{ result: JudgeResult; trace: TraceSummary }>("/verify/judge", { content, artifact_type }),
+  listRuns: async (limit = 30) => {
+    const res = await fetch(BASE + "/runs?limit=" + limit);
+    return (await res.json()) as { runs: RunSummary[] };
+  },
+  attribution: async (runId: string) => {
+    const res = await fetch(BASE + `/runs/${runId}/attribution`);
+    return (await res.json()) as Attribution;
+  },
+  replay: (runId: string) => post<Replay>(`/runs/${runId}/replay`, {}),
 };
+
+export interface RunSummary {
+  id: string;
+  module: string;
+  created_at: number;
+  trace_id: string;
+}
+
+export interface Attribution {
+  trace_id: string;
+  total_duration_ms: number;
+  total_tokens: number;
+  self_time_by_kind: Record<string, number>;
+  tokens_by_provider: Record<string, number>;
+  top_spans: { name: string; kind: string; self_ms: number; tokens: number }[];
+  errors: { name: string; layer: string; error: string }[];
+  root_cause: { name: string; layer: string; error: string } | null;
+  summary: string;
+}
+
+export interface Replay {
+  run_id: string;
+  module: string;
+  original_trajectory: string[];
+  replayed_trajectory: string[];
+  trajectory_match: boolean;
+  diff: Record<string, unknown>;
+}
 
 export interface AuditEntry {
   id: string;
