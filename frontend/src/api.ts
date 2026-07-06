@@ -110,7 +110,40 @@ export const api = {
   },
   journal: () => post<RunResult<{ markdown: string; stats: Record<string, number>; date: string }>>("/journal", {}),
   journalExport: () => post<{ path: string; date: string }>("/journal/export", {}),
+  audit: async () => {
+    const res = await fetch(BASE + "/audit");
+    return (await res.json()) as { entries: AuditEntry[] };
+  },
+  approvals: async () => {
+    const res = await fetch(BASE + "/approvals");
+    return (await res.json()) as { policy: string; approved_tools: string[] };
+  },
+  approveTool: (name: string) => post<{ ok: boolean; approved_tools: string[] }>("/approvals/" + encodeURIComponent(name), {}),
+  revokeTool: async (name: string) => {
+    const res = await fetch(BASE + "/approvals/" + encodeURIComponent(name), { method: "DELETE" });
+    return (await res.json()) as { ok: boolean; approved_tools: string[] };
+  },
+  judge: (content: string, artifact_type: string) =>
+    post<{ result: JudgeResult; trace: TraceSummary }>("/verify/judge", { content, artifact_type }),
 };
+
+export interface AuditEntry {
+  id: string;
+  ts: number;
+  actor: string;
+  tool: string;
+  action: string;
+  decision: string;
+  args_summary: string;
+}
+
+export interface JudgeResult {
+  score: number;
+  passed: boolean;
+  rationale: string;
+  dimensions: { name: string; score: number; comment: string }[];
+  llm_used: boolean;
+}
 
 export interface MemoryItem {
   id: string;

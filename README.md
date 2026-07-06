@@ -43,6 +43,9 @@
 - **可观测性**：每个 LLM/工具/子 agent = 一个 span，SSE 实时推前端做时间线，SQLite 落库可回看。
 - **长期记忆（无向量库）**：`MemoryManager` 用 Jaccard 去重 + `salience` 强化，反复出现的要点自然浮升；`memory_search`/`memory_write` 为 agentic memory 工具；每次 run 后 `MemoryCurator` 自动反思沉淀洞见。
 - **日报 + Obsidian**：`JournalWriter` 汇总当天 runs 与新增记忆生成日报；`ObsidianExporter` 直接写 vault 目录 markdown（零依赖），也可走 Obsidian MCP。
+- **治理(HITL + 审计)**：副作用工具(如 MCP 打招呼/投递)按 `auto/confirm/deny` 策略门控,人工批准后放行,全程写审计日志;CORS 收紧可配置。
+- **验证闭环 + LLM-as-judge**：简历改写「校验→自动修复→再校验」,把幻觉数字改成占位符;`/api/verify/judge` 对任意文本多维打分。
+- **上下文管理**：`ContextManager` 在预算内压缩较旧/超长消息(保留 tool-call 配对),长对话与多轮工具调用更稳。
 - **优雅降级**：未配置任何 LLM key 时，全部功能走确定性离线引擎，依然可用。
 
 ## 🚀 快速开始
@@ -97,7 +100,8 @@ backend/
     tools/       # web_search, kb_*, skill_match, memory_*
     mcp/         # MCP 客户端
     memory/      # 长期记忆(去重/强化/检索)
-    modules/     # 五大功能 + 反幻觉校验 + 反思 curator + 日报
+    governance/  # HITL 审批策略 + 审计
+    modules/     # 功能模块 + 反幻觉校验 + 反思 + 日报 + LLM-as-judge
     export/      # Obsidian 导出
     storage/     # SQLite
     main.py      # FastAPI + SSE

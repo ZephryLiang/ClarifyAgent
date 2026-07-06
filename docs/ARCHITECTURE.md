@@ -79,6 +79,18 @@ Client ──POST /api/match (stream)──► FastAPI
 Client 前端：实时渲染 span 时间线 + 最终报告
 ```
 
+## 4b. 对照 ETCLOVG 七层(Agent Harness Engineering: A Survey, 2026)
+
+| 层 | 落点 | 状态 |
+| --- | --- | --- |
+| **E** Execution | 受限内置工具;KB 防路径遍历;MCP 走子进程 | 初步 |
+| **T** Tooling | `Tool`/`ToolRegistry` + JSON schema + 双协议 tool-call 归一化 + MCP 客户端 | 完备 |
+| **C** Context | 长期记忆(去重+salience) + agentic 检索 + **`ContextManager` 窗口压缩/预算** | 良好 |
+| **L** Lifecycle | tool-calling loop + 并行 subagent + 会话/run 持久化 | 偏强 |
+| **O** Observability | span/trace 树 + SSE 实时 + SQLite + token 统计 | 完备 |
+| **V** Verification | **反幻觉忠实度校验 + 自动修复闭环** + **LLM-as-judge** | 良好 |
+| **G** Governance | **HITL 审批策略(auto/confirm/deny) + 审计日志** + 受限 CORS + MCP 低风险默认 | 良好 |
+
 ## 5. 可扩展点
 
 - **新 provider**：在 `config.py` 加一条 `ProviderConfig`（或走 env 覆盖 base_url/model）。
