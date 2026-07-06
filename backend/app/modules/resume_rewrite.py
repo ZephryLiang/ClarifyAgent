@@ -18,7 +18,7 @@ from ..gateway.registry import Gateway
 from ..harness import Agent, ToolRegistry, Tracer
 from ..harness.trace import SpanKind, SpanStatus
 from .base import extract_json, llm_available
-from .grounding import FaithfulnessReport, verify_faithfulness
+from .grounding import FaithfulnessReport, repair, verify_faithfulness
 
 # Weak verbs whose bullets typically need strengthening (zh + en).
 _WEAK_VERBS = ["负责", "参与", "协助", "帮助", "做了", "从事", "responsible for",
@@ -47,6 +47,7 @@ class RewriteSuggestion:
     principles: list[str] = field(default_factory=list)
     needs_input: list[str] = field(default_factory=list)
     faithfulness: FaithfulnessReport | None = None
+    repaired: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -55,6 +56,7 @@ class RewriteSuggestion:
             "principles": self.principles,
             "needs_input": self.needs_input,
             "faithfulness": self.faithfulness.to_dict() if self.faithfulness else None,
+            "repaired": self.repaired,
         }
 
 
@@ -94,9 +96,11 @@ def extract_bullets(resume_text: str) -> list[str]:
 
 
 class ResumeRewriter:
-    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None,
+                 approver: object | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
+        self.approver = approver
 
     async def run(self, resume_text: str, job_text: str | None = None,
                   tracer: Tracer | None = None) -> ResumeRewriteResult:
@@ -108,11 +112,20 @@ class ResumeRewriter:
                 result = await self._run_llm(resume_text, job_text, tracer, span.id)
             else:
                 result = self._run_offline(resume_text)
-            # Faithfulness verification for every suggestion.
+            # Verification closed loop: verify → auto-repair once → re-verify.
+            repaired_count = 0
             for s in result.suggestions:
                 s.faithfulness = verify_faithfulness(s.original, s.rewritten)
+                if s.faithfulness and not s.faithfulness.ok:
+                    s.rewritten = repair(s.rewritten, s.faithfulness)
+                    s.faithfulness = verify_faithfulness(s.original, s.rewritten)
+                    s.repaired = True
+                    repaired_count += 1
+                    if "存在无法核实的数据，已改为占位符待你确认。" not in s.needs_input:
+                        s.needs_input.append("存在无法核实的数据，已改为占位符待你确认。")
             flagged = sum(0 if s.faithfulness and s.faithfulness.ok else 1 for s in result.suggestions)
-            tracer.end_span(span, SpanStatus.OK, suggestions=len(result.suggestions), flagged=flagged)
+            tracer.end_span(span, SpanStatus.OK, suggestions=len(result.suggestions),
+                            flagged=flagged, repaired=repaired_count)
             return result
         except Exception as exc:  # noqa: BLE001
             tracer.end_span(span, SpanStatus.ERROR, error=str(exc))
@@ -124,7 +137,8 @@ class ResumeRewriter:
         # Restrict to KB tools so the agent grounds via grep/read.
         kb_tools = self.tools.subset(["kb_list", "kb_grep", "kb_read"]) if self.tools else ToolRegistry()
         agent = Agent(self.gateway, kb_tools, tracer, system=_SYSTEM,
-                      name="resume-rewriter", temperature=0.3, parent_span_id=parent_id)
+                      name="resume-rewriter", temperature=0.3, parent_span_id=parent_id,
+                      approver=self.approver)
         prompt = "请改写以下简历中的经历条目，逐条给出改写与依据。\n\n简历：\n" + resume_text
         if job_text:
             prompt += "\n\n目标岗位 JD（用于对齐关键词，但不得虚构技能）：\n" + job_text

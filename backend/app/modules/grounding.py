@@ -13,7 +13,8 @@ from dataclasses import dataclass, field
 
 # Numbers, percentages, currency, multipliers like "10x".
 _NUMBER_RE = re.compile(r"\d+(?:[.,]\d+)?\s*(?:%|％|x|X|倍|k|K|w|W|万|亿|ms|s|QPS|TPS|GB|TB|MB)?")
-_PLACEHOLDER_RE = re.compile(r"\[[^\]]*(?:待补充|TODO|待填|placeholder)[^\]]*\]", re.IGNORECASE)
+_PLACEHOLDER_RE = re.compile(
+    r"\[[^\]]*(?:待补充|待核实|待填|TODO|placeholder)[^\]]*\]", re.IGNORECASE)
 
 
 @dataclass
@@ -73,3 +74,18 @@ def verify_faithfulness(original: str, rewritten: str) -> FaithfulnessReport:
 
     issues = check_numbers(original, rewritten)
     return FaithfulnessReport(ok=not issues, issues=issues)
+
+
+def repair(rewritten: str, report: FaithfulnessReport) -> str:
+    """Deterministically neutralise unsupported claims by placeholdering them.
+
+    Each flagged numeric value is wrapped as ``[待核实: X]`` so the rewrite no
+    longer asserts a fabricated figure — turning a hallucination into an honest
+    prompt for the candidate to confirm. Re-verifying the result passes.
+    """
+
+    fixed = rewritten
+    for issue in report.issues:
+        if issue.kind == "unsupported_number" and issue.value in fixed:
+            fixed = fixed.replace(issue.value, f"[待核实: {issue.value}]", 1)
+    return fixed

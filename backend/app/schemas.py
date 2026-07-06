@@ -60,3 +60,9 @@ class ExportRequest(BaseModel):
     content: str
     subdir: str = "求职Agent"
     tags: list[str] = Field(default_factory=list)
+
+
+class JudgeRequest(BaseModel):
+    content: str
+    criteria: list[str] = Field(default_factory=list)
+    artifact_type: str = "文本"

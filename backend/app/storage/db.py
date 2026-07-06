@@ -55,8 +55,19 @@ class Store:
                     updated_at REAL NOT NULL,
                     meta_json TEXT
                 );
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id TEXT PRIMARY KEY,
+                    ts REAL NOT NULL,
+                    actor TEXT,
+                    tool TEXT,
+                    action TEXT,
+                    decision TEXT,
+                    args_summary TEXT,
+                    trace_id TEXT
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_module ON runs(module, created_at);
                 CREATE INDEX IF NOT EXISTS idx_mem_kind ON memories(kind, salience);
+                CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
                 """
             )
             self._conn.commit()
@@ -185,6 +196,24 @@ class Store:
                 "result": json.loads(r["result_json"]) if r["result_json"] else None,
             })
         return out
+
+    # -- audit -------------------------------------------------------------- #
+
+    def audit_insert(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO audit_log (id, ts, actor, tool, action, decision, args_summary, trace_id)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (row["id"], row["ts"], row.get("actor"), row.get("tool"), row.get("action"),
+                 row.get("decision"), row.get("args_summary"), row.get("trace_id")),
+            )
+            self._conn.commit()
+
+    def audit_list(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM audit_log ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
 
     def close(self) -> None:
         with self._lock:

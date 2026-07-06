@@ -50,6 +50,13 @@ class MCPTool(Tool):
         self.server = server
         self.description = f"[MCP:{server}] {description}"
         self.parameters = parameters or {"type": "object", "properties": {}}
+        # Conservatively treat write-like remote tools as side-effecting so the
+        # governance layer gates them (e.g. greeting a recruiter, applying).
+        lowered = name.lower()
+        self.side_effect = any(k in lowered for k in (
+            "greet", "send", "apply", "message", "post", "submit",
+            "create", "update", "delete", "write", "reply", "invite",
+        ))
         self._manager = manager
 
     async def run(self, **kwargs: Any) -> ToolResult:

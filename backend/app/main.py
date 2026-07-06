@@ -18,6 +18,7 @@ from .schemas import (
     ExportRequest,
     InterviewAnswerRequest,
     InterviewStartRequest,
+    JudgeRequest,
     MatchRequest,
     MemoryCreateRequest,
     MemoryUpdateRequest,
@@ -30,14 +31,14 @@ from .service import AppServices
 app = FastAPI(title="求职 Agent", version="0.1.0",
               description="Agentic job-seeking assistant")
 
+services: AppServices = AppServices()
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=services.settings.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-services: AppServices = AppServices()
 
 
 @app.on_event("startup")
@@ -280,6 +281,46 @@ async def journal_export() -> dict[str, Any]:
 async def export_obsidian(req: ExportRequest) -> dict[str, Any]:
     path = services.obsidian.write(req.title, req.content, subdir=req.subdir, tags=req.tags)
     return {"path": path}
+
+
+# --------------------------------------------------------------------------- #
+# Governance: audit trail + HITL approvals
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/audit")
+async def audit_list(limit: int = 100) -> dict[str, Any]:
+    return {"entries": services.store.audit_list(limit)}
+
+
+@app.get("/api/approvals")
+async def approvals() -> dict[str, Any]:
+    return {"policy": services.approver.policy, "approved_tools": services.approver.approved_tools()}
+
+
+@app.post("/api/approvals/{tool_name}")
+async def approve_tool(tool_name: str) -> dict[str, Any]:
+    services.approver.approve_tool(tool_name)
+    services.approver.record("approve_tool", "human_approved", actor="user", tool=tool_name)
+    return {"ok": True, "approved_tools": services.approver.approved_tools()}
+
+
+@app.delete("/api/approvals/{tool_name}")
+async def revoke_tool(tool_name: str) -> dict[str, Any]:
+    services.approver.revoke_tool(tool_name)
+    services.approver.record("revoke_tool", "revoked", actor="user", tool=tool_name)
+    return {"ok": True, "approved_tools": services.approver.approved_tools()}
+
+
+# --------------------------------------------------------------------------- #
+# Verification: LLM-as-judge
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/verify/judge")
+async def verify_judge(req: JudgeRequest) -> dict[str, Any]:
+    tracer = services.new_tracer()
+    result = await services.judge.score(req.content, req.criteria or None,
+                                        req.artifact_type, tracer)
+    return {"result": result.to_dict(), "trace": tracer.summary()}
 
 
 # --------------------------------------------------------------------------- #

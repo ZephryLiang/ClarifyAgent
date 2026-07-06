@@ -35,9 +35,11 @@ class MatchReport:
 
 
 class Matcher:
-    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None,
+                 approver: object | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
+        self.approver = approver
 
     async def run(self, resume_text: str, job_text: str,
                   tracer: Tracer | None = None) -> MatchReport:
@@ -53,7 +55,8 @@ class Matcher:
                 return MatchReport(match=match, synthesis=match.recommendation, llm_used=False)
 
             assert self.gateway is not None
-            orchestrator = Orchestrator(self.gateway, self.tools, tracer, max_iterations=4)
+            orchestrator = Orchestrator(self.gateway, self.tools, tracer, max_iterations=4,
+                                        approver=self.approver)
             company = job.company or "该公司"
             tasks = [
                 SubagentTask(
@@ -92,7 +95,8 @@ class Matcher:
         assert self.gateway is not None
         agent = Agent(self.gateway, ToolRegistry(), tracer,
                       system="你是求职策略顾问，综合各方分析给出可执行的投递建议。",
-                      name="match-synthesis", temperature=0.4, parent_span_id=parent_id)
+                      name="match-synthesis", temperature=0.4, parent_span_id=parent_id,
+                      approver=self.approver)
         prompt = (
             f"客观匹配度评分：{match.score}/100（{match.verdict}）。\n"
             f"已匹配技能：{match.matched_skills}\n缺失硬性技能：{match.missing_required}\n\n"

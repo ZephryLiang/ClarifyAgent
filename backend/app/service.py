@@ -13,6 +13,7 @@ from .config import Settings
 from .config import settings as default_settings
 from .export import ObsidianExporter
 from .gateway.registry import Gateway
+from .governance import ApprovalManager
 from .harness import ToolRegistry, Tracer
 from .mcp import MCPManager
 from .memory import MemoryManager
@@ -25,6 +26,7 @@ from .modules import (
 )
 from .modules.curator import MemoryCurator
 from .modules.journal import JournalWriter
+from .modules.verify import Judge
 from .storage import Store
 from .tools import build_registry
 from .tools.memory import build_memory_tools
@@ -45,13 +47,17 @@ class AppServices:
         for tool in build_memory_tools(self.memory):
             self.tools.register(tool)
 
-        self.rewriter = ResumeRewriter(self.gateway, self.tools)
-        self.matcher = Matcher(self.gateway, self.tools)
+        # Governance: HITL approval + audit for side-effecting tools.
+        self.approver = ApprovalManager(self.store, self.settings.hitl_policy)
+
+        self.rewriter = ResumeRewriter(self.gateway, self.tools, approver=self.approver)
+        self.matcher = Matcher(self.gateway, self.tools, approver=self.approver)
         self.outreach = OutreachWriter(self.gateway)
         self.interviewer = MockInterviewer(self.gateway)
-        self.retrospective = Retrospective(self.gateway, self.tools)
+        self.retrospective = Retrospective(self.gateway, self.tools, approver=self.approver)
         self.curator = MemoryCurator(self.memory, self.gateway)
         self.journal = JournalWriter(self.store, self.memory, self.gateway)
+        self.judge = Judge(self.gateway)
         self.obsidian = ObsidianExporter()
         self._mcp_notes: list[str] = []
 
@@ -83,6 +89,8 @@ class AppServices:
             "mcp_notes": self._mcp_notes,
             "default_priority": [p.name for p in self.settings.resolved_priority()],
             "memory_count": len(self.memory.list()),
+            "hitl_policy": self.approver.policy,
+            "approved_tools": self.approver.approved_tools(),
         }
 
     def new_tracer(self) -> Tracer:

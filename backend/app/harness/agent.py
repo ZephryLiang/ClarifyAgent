@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
+from typing import Any
 
 from ..config import settings as default_settings
 from ..gateway.base import Message, ToolCall
@@ -44,6 +45,8 @@ class Agent:
         temperature: float = 0.4,
         prefer_provider: str | None = None,
         parent_span_id: str | None = None,
+        approver: Any = None,
+        context_manager: Any = None,
     ) -> None:
         self.gateway = gateway
         self.tools = tools or ToolRegistry()
@@ -54,6 +57,17 @@ class Agent:
         self.temperature = temperature
         self.prefer_provider = prefer_provider
         self.parent_span_id = parent_span_id
+        # Optional governance approver (HITL) and context compactor. Kept as
+        # ``Any`` to avoid import cycles; duck-typed at call sites.
+        self.approver = approver
+        if context_manager is None:
+            from .context import ContextManager
+
+            context_manager = ContextManager(
+                char_budget=default_settings.context_char_budget,
+                keep_recent=default_settings.context_keep_recent,
+            )
+        self.context_manager = context_manager
 
     async def run(self, prompt: str, history: list[Message] | None = None) -> AgentResult:
         messages: list[Message] = list(history or [])
@@ -66,6 +80,11 @@ class Agent:
 
         try:
             for iteration in range(1, self.max_iterations + 1):
+                if self.context_manager is not None:
+                    messages, compacted = self.context_manager.fit(messages)
+                    if compacted:
+                        self.tracer.log("context compacted to fit budget",
+                                        size=self.context_manager.size(messages))
                 response = await self._call_llm(messages, tool_specs, agent_span.id)
 
                 if not response.wants_tools:
@@ -133,6 +152,14 @@ class Agent:
             if tool is None:
                 self.tracer.end_span(span, SpanStatus.ERROR, error="unknown tool")
                 return ToolResult(content=f"错误: 未知工具 '{call.name}'", is_error=True)
+            # Governance gate for side-effecting tools (HITL / audit).
+            if getattr(tool, "side_effect", False) and self.approver is not None:
+                decision = self.approver.check(call.name, call.arguments,
+                                               actor=self.name, trace_id=self.tracer.trace_id)
+                if not decision.allowed:
+                    self.tracer.end_span(span, SpanStatus.OK, blocked=True,
+                                         decision=decision.decision)
+                    return ToolResult(content=f"[需人工确认] {decision.reason}", is_error=False)
             try:
                 result = await tool.run(**call.arguments)
                 self.tracer.end_span(span, SpanStatus.OK if not result.is_error else SpanStatus.ERROR,

@@ -71,6 +71,15 @@ class Settings:
     max_tool_iterations: int = int(os.getenv("JOBSEEKER_MAX_ITERATIONS", "8"))
     request_timeout: float = float(os.getenv("JOBSEEKER_TIMEOUT", "60"))
     mcp_config_path: str | None = os.getenv("JOBSEEKER_MCP_CONFIG")
+    # Governance: HITL policy for side-effecting tools — "auto" | "confirm" | "deny".
+    hitl_policy: str = field(default_factory=lambda: os.getenv("JOBSEEKER_HITL", "confirm"))
+    # Allowed CORS origins (comma-separated). Defaults to common local dev hosts.
+    cors_origins: list[str] = field(default_factory=lambda: _cors_origins())
+    # Context management: approximate character budget for conversation history.
+    context_char_budget: int = field(
+        default_factory=lambda: int(os.getenv("JOBSEEKER_CONTEXT_BUDGET", "12000")))
+    context_keep_recent: int = field(
+        default_factory=lambda: int(os.getenv("JOBSEEKER_CONTEXT_KEEP_RECENT", "6")))
 
     def enabled_providers(self) -> list[ProviderConfig]:
         return [p for p in self.providers if p.enabled]
@@ -87,6 +96,16 @@ class Settings:
         order: dict[str, int] = {n: i for i, n in enumerate(self.provider_priority)}
         enabled = self.enabled_providers()
         return sorted(enabled, key=lambda p: order.get(p.name, 999))
+
+
+def _cors_origins() -> list[str]:
+    raw = os.getenv("JOBSEEKER_CORS_ORIGINS")
+    if raw:
+        return [x.strip() for x in raw.split(",") if x.strip()]
+    return [
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:8000", "http://127.0.0.1:8000",
+    ]
 
 
 def _priority_list() -> list[str]:

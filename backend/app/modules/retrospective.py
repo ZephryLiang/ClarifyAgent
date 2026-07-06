@@ -54,9 +54,11 @@ class RetrospectiveResult:
 
 
 class Retrospective:
-    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None) -> None:
+    def __init__(self, gateway: Gateway | None = None, tools: ToolRegistry | None = None,
+                 approver: object | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
+        self.approver = approver
 
     async def run(self, transcript: str, job_text: str = "", company: str = "",
                   tracer: Tracer | None = None) -> RetrospectiveResult:
@@ -72,7 +74,8 @@ class Retrospective:
             assert self.gateway is not None
             tools = self.tools.subset(["web_search"]) if self.tools else ToolRegistry()
             agent = Agent(self.gateway, tools, tracer, system=_SYSTEM,
-                          name="retrospective", temperature=0.4, parent_span_id=span.id)
+                          name="retrospective", temperature=0.4, parent_span_id=span.id,
+                          approver=self.approver)
             prompt = (
                 f"目标公司：{company or '未知'}\n目标岗位JD：\n{job_text or '未提供'}\n\n"
                 f"面试记录：\n{transcript}\n\n请对这场面试做复盘。"

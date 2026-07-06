@@ -31,6 +31,9 @@ class Tool:
     name: str = ""
     description: str = ""
     parameters: dict[str, Any] = {"type": "object", "properties": {}}
+    # Side-effecting tools (send/apply/update external state) are gated by the
+    # governance approval policy before execution.
+    side_effect: bool = False
 
     def spec(self) -> ToolSpec:
         return ToolSpec(name=self.name, description=self.description, parameters=self.parameters)

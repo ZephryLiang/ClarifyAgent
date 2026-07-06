@@ -38,11 +38,12 @@ class Orchestrator:
     """Runs subagents in parallel under a shared tracer."""
 
     def __init__(self, gateway: Gateway, tools: ToolRegistry, tracer: Tracer | None = None,
-                 max_iterations: int = 5) -> None:
+                 max_iterations: int = 5, approver: object | None = None) -> None:
         self.gateway = gateway
         self.tools = tools
         self.tracer = tracer or Tracer()
         self.max_iterations = max_iterations
+        self.approver = approver
 
     async def run_parallel(self, tasks: list[SubagentTask],
                            parent_span_id: str | None = None) -> list[SubagentOutcome]:
@@ -61,6 +62,7 @@ class Orchestrator:
                 max_iterations=self.max_iterations,
                 temperature=task.temperature,
                 parent_span_id=span.id,
+                approver=self.approver,
             )
             try:
                 result: AgentResult = await agent.run(task.prompt)

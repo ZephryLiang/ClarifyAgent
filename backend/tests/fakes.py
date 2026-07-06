@@ -71,3 +71,19 @@ class EchoTool(Tool):
 
     async def run(self, text: str = "") -> ToolResult:
         return ToolResult(content=self._transform(text))
+
+
+class SideEffectTool(Tool):
+    """A tool that records executions; used to test the governance gate."""
+
+    name = "send_message"
+    description = "send a message (side-effecting)"
+    parameters = {"type": "object", "properties": {"to": {"type": "string"}}}
+    side_effect = True
+
+    def __init__(self) -> None:
+        self.executed = 0
+
+    async def run(self, **kwargs) -> ToolResult:
+        self.executed += 1
+        return ToolResult(content="sent")
