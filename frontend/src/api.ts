@@ -98,4 +98,27 @@ export const api = {
     job_text?: string;
     company?: string;
   }) => post<RunResult<unknown>>("/retrospective", payload),
+  listMemory: async (kind?: string) => {
+    const q = kind ? `?kind=${encodeURIComponent(kind)}` : "";
+    const res = await fetch(BASE + "/memory" + q);
+    return (await res.json()) as { memories: MemoryItem[] };
+  },
+  createMemory: (content: string, kind: string, tags: string[]) =>
+    post<MemoryItem>("/memory", { content, kind, tags }),
+  deleteMemory: async (id: string) => {
+    await fetch(BASE + "/memory/" + id, { method: "DELETE" });
+  },
+  journal: () => post<RunResult<{ markdown: string; stats: Record<string, number>; date: string }>>("/journal", {}),
+  journalExport: () => post<{ path: string; date: string }>("/journal/export", {}),
 };
+
+export interface MemoryItem {
+  id: string;
+  kind: string;
+  content: string;
+  tags: string[];
+  source: string;
+  salience: number;
+  created_at: number;
+  updated_at: number;
+}

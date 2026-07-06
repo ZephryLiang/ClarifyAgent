@@ -13,6 +13,7 @@
 | 👋 **打招呼** | 多风格定制化开场消息 |
 | 🎤 **模拟面试** | 多轮交互，面试官 agent 按 JD+简历出题、追问，支持中英文（外企） |
 | 🔍 **面试复盘** | 面试记录分析（优劣势 / 遗漏点 / 参考答案 / 提升计划）+ web 搜索真实面经 |
+| 🧠 **记忆 & 日报** | 长期记忆(洞见/原则/偏好/反复出现)自动沉淀与去重强化；一键生成**今日日报**并导出 Obsidian |
 
 ## 🏗️ 架构
 
@@ -40,6 +41,8 @@
 - **有依据 + 反幻觉的简历改写**：只重述既有事实 + 套用方法论，缺数据占位不编造，改写后做忠实度校验。
 - **MCP 客户端**：招聘平台数据经用户自配的社区 MCP server 接入，合规与登录态交给上游。
 - **可观测性**：每个 LLM/工具/子 agent = 一个 span，SSE 实时推前端做时间线，SQLite 落库可回看。
+- **长期记忆（无向量库）**：`MemoryManager` 用 Jaccard 去重 + `salience` 强化，反复出现的要点自然浮升；`memory_search`/`memory_write` 为 agentic memory 工具；每次 run 后 `MemoryCurator` 自动反思沉淀洞见。
+- **日报 + Obsidian**：`JournalWriter` 汇总当天 runs 与新增记忆生成日报；`ObsidianExporter` 直接写 vault 目录 markdown（零依赖），也可走 Obsidian MCP。
 - **优雅降级**：未配置任何 LLM key 时，全部功能走确定性离线引擎，依然可用。
 
 ## 🚀 快速开始
@@ -91,9 +94,11 @@ backend/
     domain/      # 零依赖：解析、技能库、匹配
     gateway/     # 双协议 LLM 网关 + registry
     harness/     # agent loop / 并行 subagent / trace
-    tools/       # web_search, kb_*, skill_match
+    tools/       # web_search, kb_*, skill_match, memory_*
     mcp/         # MCP 客户端
-    modules/     # 五大功能 + 反幻觉校验
+    memory/      # 长期记忆(去重/强化/检索)
+    modules/     # 五大功能 + 反幻觉校验 + 反思 curator + 日报
+    export/      # Obsidian 导出
     storage/     # SQLite
     main.py      # FastAPI + SSE
   knowledge_base/resume/   # 可引用的简历最佳实践语料

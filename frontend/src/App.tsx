@@ -7,8 +7,9 @@ import { Matching } from "./components/Matching";
 import { Outreach } from "./components/Outreach";
 import { Interview } from "./components/Interview";
 import { Retrospective } from "./components/Retrospective";
+import { MemoryPanel } from "./components/MemoryPanel";
 
-type Tab = "rewrite" | "match" | "outreach" | "interview" | "retro";
+type Tab = "rewrite" | "match" | "outreach" | "interview" | "retro" | "memory";
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "rewrite", label: "简历改写", icon: "✍️" },
@@ -16,6 +17,7 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "outreach", label: "打招呼", icon: "👋" },
   { id: "interview", label: "模拟面试", icon: "🎤" },
   { id: "retro", label: "面试复盘", icon: "🔍" },
+  { id: "memory", label: "记忆 & 日报", icon: "🧠" },
 ];
 
 export default function App() {
@@ -101,6 +103,7 @@ export default function App() {
             setCompany={setCompany}
           />
         )}
+        {tab === "memory" && <MemoryPanel />}
       </main>
 
       <footer className="mx-auto max-w-6xl px-6 py-6 text-center text-xs text-slate-600">
