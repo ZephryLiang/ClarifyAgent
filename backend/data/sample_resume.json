@@ -1,0 +1,14 @@
+{
+  "name": "李娜",
+  "title": "数据科学家 / Data Scientist",
+  "summary": "3 年数据科学经验，擅长机器学习建模与数据分析，曾主导多个从 0 到 1 的算法项目落地。",
+  "years_experience": 3,
+  "skills": ["Python", "Machine Learning", "PyTorch", "SQL", "Data Analysis", "NLP"],
+  "experiences": [
+    "构建用户流失预测模型，准确率提升至 89%，帮助业务减少 15% 流失",
+    "搭建推荐系统的特征工程与召回链路"
+  ],
+  "education": ["统计学 硕士，某大学，2021"],
+  "highlights": ["在公司内部 AI 竞赛中获得第一名"],
+  "contact": { "email": "lina@example.com" }
+}
