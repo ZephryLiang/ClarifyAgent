@@ -15,9 +15,12 @@ from fastapi.staticfiles import StaticFiles
 
 from .harness import Tracer
 from .schemas import (
+    ExportRequest,
     InterviewAnswerRequest,
     InterviewStartRequest,
     MatchRequest,
+    MemoryCreateRequest,
+    MemoryUpdateRequest,
     OutreachRequest,
     RetrospectiveRequest,
     RewriteRequest,
@@ -66,7 +69,10 @@ async def _stream_run(
 
     async def watch() -> Any:
         try:
-            return await runner(tracer)
+            result = await runner(tracer)
+            result_dict = result.to_dict() if hasattr(result, "to_dict") else result
+            await services.reflect_after(module, input_data, result_dict, tracer)
+            return result_dict
         finally:
             tracer.close()
 
@@ -75,8 +81,7 @@ async def _stream_run(
         try:
             async for event in tracer.events():
                 yield _sse(event)
-            result = await watcher
-            result_dict = result.to_dict() if hasattr(result, "to_dict") else result
+            result_dict = await watcher
             run_id = services.store.save_run(module, input_data, result_dict, tracer.summary())
             yield _sse({"type": "result", "run_id": run_id,
                         "result": result_dict, "trace": tracer.summary()})
@@ -92,6 +97,7 @@ async def _run_json(module: str, input_data: dict[str, Any],
     tracer = services.new_tracer()
     result = await runner(tracer)
     result_dict = result.to_dict() if hasattr(result, "to_dict") else result
+    await services.reflect_after(module, input_data, result_dict, tracer)
     run_id = services.store.save_run(module, input_data, result_dict, tracer.summary())
     return {"run_id": run_id, "result": result_dict, "trace": tracer.summary()}
 
@@ -211,6 +217,69 @@ async def interview_get(session_id: str) -> dict[str, Any]:
     if stored is None:
         raise HTTPException(status_code=404, detail="session not found")
     return stored
+
+
+# --------------------------------------------------------------------------- #
+# Memory
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/memory")
+async def memory_list(kind: str | None = None) -> dict[str, Any]:
+    return {"memories": [m.to_dict() for m in services.memory.list(kind)]}
+
+
+@app.get("/api/memory/search")
+async def memory_search(q: str, kind: str | None = None) -> dict[str, Any]:
+    return {"memories": [m.to_dict() for m in services.memory.search(q, kind)]}
+
+
+@app.post("/api/memory")
+async def memory_create(req: MemoryCreateRequest) -> dict[str, Any]:
+    item = services.memory.add(req.content, kind=req.kind, tags=req.tags, source="user")
+    return item.to_dict()
+
+
+@app.put("/api/memory/{mem_id}")
+async def memory_update(mem_id: str, req: MemoryUpdateRequest) -> dict[str, Any]:
+    ok = services.memory.update(mem_id, req.content, req.tags)
+    if not ok:
+        raise HTTPException(status_code=404, detail="memory not found")
+    return {"ok": True}
+
+
+@app.delete("/api/memory/{mem_id}")
+async def memory_delete(mem_id: str) -> dict[str, Any]:
+    ok = services.memory.delete(mem_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="memory not found")
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------- #
+# Daily report (今日日报) + Obsidian export
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/journal")
+async def journal() -> dict[str, Any]:
+    tracer = services.new_tracer()
+    result = await services.journal.run(tracer)
+    result_dict = result.to_dict()
+    run_id = services.store.save_run("journal", {}, result_dict, tracer.summary())
+    return {"run_id": run_id, "result": result_dict, "trace": tracer.summary()}
+
+
+@app.post("/api/journal/export")
+async def journal_export() -> dict[str, Any]:
+    result = await services.journal.run(services.new_tracer())
+    path = services.obsidian.write(f"今日日报 {result.date}", result.markdown,
+                                   subdir="日报", tags=["日报", "jobseeker"])
+    return {"path": path, "date": result.date}
+
+
+@app.post("/api/export/obsidian")
+async def export_obsidian(req: ExportRequest) -> dict[str, Any]:
+    path = services.obsidian.write(req.title, req.content, subdir=req.subdir, tags=req.tags)
+    return {"path": path}
 
 
 # --------------------------------------------------------------------------- #

@@ -42,3 +42,21 @@ class RetrospectiveRequest(BaseModel):
     job_text: str = ""
     company: str = ""
     stream: bool = False
+
+
+class MemoryCreateRequest(BaseModel):
+    content: str
+    kind: str = Field("insight", description="insight | principle | preference | fact | recurring")
+    tags: list[str] = Field(default_factory=list)
+
+
+class MemoryUpdateRequest(BaseModel):
+    content: str
+    tags: list[str] = Field(default_factory=list)
+
+
+class ExportRequest(BaseModel):
+    title: str
+    content: str
+    subdir: str = "求职Agent"
+    tags: list[str] = Field(default_factory=list)

@@ -7,11 +7,15 @@ and dependency-injected so tests can build a service with fakes.
 
 from __future__ import annotations
 
+from typing import Any
+
 from .config import Settings
 from .config import settings as default_settings
+from .export import ObsidianExporter
 from .gateway.registry import Gateway
 from .harness import ToolRegistry, Tracer
 from .mcp import MCPManager
+from .memory import MemoryManager
 from .modules import (
     Matcher,
     MockInterviewer,
@@ -19,8 +23,11 @@ from .modules import (
     ResumeRewriter,
     Retrospective,
 )
+from .modules.curator import MemoryCurator
+from .modules.journal import JournalWriter
 from .storage import Store
 from .tools import build_registry
+from .tools.memory import build_memory_tools
 
 
 class AppServices:
@@ -33,12 +40,28 @@ class AppServices:
         self.mcp = MCPManager.from_path(self.settings.mcp_config_path)
         self.store = store or Store()
 
+        # Long-term memory + agentic memory tools.
+        self.memory = MemoryManager(self.store)
+        for tool in build_memory_tools(self.memory):
+            self.tools.register(tool)
+
         self.rewriter = ResumeRewriter(self.gateway, self.tools)
         self.matcher = Matcher(self.gateway, self.tools)
         self.outreach = OutreachWriter(self.gateway)
         self.interviewer = MockInterviewer(self.gateway)
         self.retrospective = Retrospective(self.gateway, self.tools)
+        self.curator = MemoryCurator(self.memory, self.gateway)
+        self.journal = JournalWriter(self.store, self.memory, self.gateway)
+        self.obsidian = ObsidianExporter()
         self._mcp_notes: list[str] = []
+
+    async def reflect_after(self, module: str, input_data: dict[str, Any],
+                            result: dict[str, Any], tracer: Tracer) -> None:
+        """Best-effort post-run reflection to capture durable memories."""
+
+        if module == "journal":
+            return
+        await self.curator.reflect(module, input_data, result, tracer)
 
     async def connect_mcp(self) -> list[str]:
         """Connect configured MCP servers and merge their tools into the registry."""
@@ -59,6 +82,7 @@ class AppServices:
             "tools": self.tools.names(),
             "mcp_notes": self._mcp_notes,
             "default_priority": [p.name for p in self.settings.resolved_priority()],
+            "memory_count": len(self.memory.list()),
         }
 
     def new_tracer(self) -> Tracer:

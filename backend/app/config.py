@@ -19,6 +19,11 @@ KNOWLEDGE_BASE_DIR = Path(
 )
 DATA_DIR = BACKEND_DIR / "data"
 DB_PATH = Path(os.getenv("JOBSEEKER_DB", str(BACKEND_DIR / "jobseeker.db")))
+# Obsidian vault directory for note export; defaults to a local ``exports`` dir
+# (Obsidian just reads plain markdown from a folder).
+OBSIDIAN_VAULT_DIR = Path(
+    os.getenv("JOBSEEKER_OBSIDIAN_VAULT", str(BACKEND_DIR / "exports"))
+)
 
 
 @dataclass

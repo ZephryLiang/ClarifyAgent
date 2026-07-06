@@ -12,6 +12,7 @@ env/
 # Databases / local state
 *.db
 *.sqlite3
+backend/exports/
 
 # Env / secrets
 .env

@@ -43,7 +43,20 @@ class Store:
                     updated_at REAL NOT NULL,
                     data_json TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS memories (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    norm TEXT NOT NULL,
+                    tags TEXT,
+                    source TEXT,
+                    salience INTEGER NOT NULL DEFAULT 1,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    meta_json TEXT
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_module ON runs(module, created_at);
+                CREATE INDEX IF NOT EXISTS idx_mem_kind ON memories(kind, salience);
                 """
             )
             self._conn.commit()
@@ -111,6 +124,67 @@ class Store:
             row = self._conn.execute(
                 "SELECT data_json FROM interview_sessions WHERE id=?", (session_id,)).fetchone()
         return json.loads(row["data_json"]) if row else None
+
+    # -- memories ----------------------------------------------------------- #
+
+    def mem_insert(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO memories (id, kind, content, norm, tags, source, salience,"
+                " created_at, updated_at, meta_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (row["id"], row["kind"], row["content"], row["norm"], row.get("tags"),
+                 row.get("source"), row.get("salience", 1), row["created_at"],
+                 row["updated_at"], row.get("meta_json")),
+            )
+            self._conn.commit()
+
+    def mem_reinforce(self, mem_id: str, tags: str, updated_at: float) -> None:
+        with self._lock:
+            self._conn.execute(
+                "UPDATE memories SET salience = salience + 1, tags=?, updated_at=? WHERE id=?",
+                (tags, updated_at, mem_id),
+            )
+            self._conn.commit()
+
+    def mem_update(self, mem_id: str, content: str, norm: str, tags: str, updated_at: float) -> bool:
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE memories SET content=?, norm=?, tags=?, updated_at=? WHERE id=?",
+                (content, norm, tags, updated_at, mem_id),
+            )
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def mem_delete(self, mem_id: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM memories WHERE id=?", (mem_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    def mem_all(self, kind: str | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            if kind:
+                rows = self._conn.execute(
+                    "SELECT * FROM memories WHERE kind=? ORDER BY salience DESC, updated_at DESC",
+                    (kind,)).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM memories ORDER BY salience DESC, updated_at DESC").fetchall()
+        return [dict(r) for r in rows]
+
+    def runs_since(self, since_ts: float) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, trace_id, module, created_at, input_json, result_json FROM runs"
+                " WHERE created_at >= ? ORDER BY created_at ASC", (since_ts,)).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "id": r["id"], "module": r["module"], "created_at": r["created_at"],
+                "input": json.loads(r["input_json"]) if r["input_json"] else None,
+                "result": json.loads(r["result_json"]) if r["result_json"] else None,
+            })
+        return out
 
     def close(self) -> None:
         with self._lock:
