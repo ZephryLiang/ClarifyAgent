@@ -13,7 +13,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from .evals import replay_run
 from .harness import Tracer
+from .observability import analyze_trace
 from .schemas import (
     ExportRequest,
     InterviewAnswerRequest,
@@ -128,6 +130,32 @@ async def get_run(run_id: str) -> dict[str, Any]:
     if not run:
         raise HTTPException(status_code=404, detail="run not found")
     return run
+
+
+@app.get("/api/runs/{run_id}/attribution")
+async def run_attribution(run_id: str) -> dict[str, Any]:
+    run = services.store.get_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="run not found")
+    report = analyze_trace(run.get("trace") or {})
+    return report.to_dict()
+
+
+@app.post("/api/runs/{run_id}/replay")
+async def run_replay(run_id: str) -> dict[str, Any]:
+    result = await replay_run(services, run_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return result.to_dict()
+
+
+@app.get("/api/checkpoints/{cp_id}")
+async def get_checkpoint(cp_id: str) -> dict[str, Any]:
+    cp = services.store.checkpoint_load(cp_id)
+    if cp is None:
+        raise HTTPException(status_code=404, detail="checkpoint not found")
+    return {"done": cp["done"], "iteration": cp["state"].get("iteration"),
+            "messages": len(cp["state"].get("messages", []))}
 
 
 # --------------------------------------------------------------------------- #

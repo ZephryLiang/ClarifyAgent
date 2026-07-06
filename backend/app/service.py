@@ -14,7 +14,7 @@ from .config import settings as default_settings
 from .export import ObsidianExporter
 from .gateway.registry import Gateway
 from .governance import ApprovalManager
-from .harness import ToolRegistry, Tracer
+from .harness import StoreCheckpointer, ToolRegistry, Tracer
 from .mcp import MCPManager
 from .memory import MemoryManager
 from .modules import (
@@ -49,6 +49,8 @@ class AppServices:
 
         # Governance: HITL approval + audit for side-effecting tools.
         self.approver = ApprovalManager(self.store, self.settings.hitl_policy)
+        # Durable execution: checkpointer for resumable agent runs.
+        self.checkpointer = StoreCheckpointer(self.store)
 
         self.rewriter = ResumeRewriter(self.gateway, self.tools, approver=self.approver)
         self.matcher = Matcher(self.gateway, self.tools, approver=self.approver)

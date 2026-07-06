@@ -47,6 +47,8 @@ class Agent:
         parent_span_id: str | None = None,
         approver: Any = None,
         context_manager: Any = None,
+        checkpointer: Any = None,
+        checkpoint_id: str | None = None,
     ) -> None:
         self.gateway = gateway
         self.tools = tools or ToolRegistry()
@@ -68,18 +70,37 @@ class Agent:
                 keep_recent=default_settings.context_keep_recent,
             )
         self.context_manager = context_manager
+        # Durable execution: persist state each iteration, resume by id.
+        self.checkpointer = checkpointer
+        self.checkpoint_id = checkpoint_id
 
     async def run(self, prompt: str, history: list[Message] | None = None) -> AgentResult:
         messages: list[Message] = list(history or [])
-        messages.append(Message(role="user", content=prompt))
+        start_iteration = 1
+        total_tool_calls = 0
+        resumed = False
+
+        # Resume from a checkpoint if one exists for this id.
+        if self.checkpointer is not None and self.checkpoint_id:
+            saved = self.checkpointer.load(self.checkpoint_id)
+            if saved and not saved.get("done") and saved.get("state"):
+                from .checkpoint import deserialize_messages
+
+                state = saved["state"]
+                messages = deserialize_messages(state.get("messages", []))
+                start_iteration = int(state.get("iteration", 0)) + 1
+                total_tool_calls = int(state.get("tool_calls", 0))
+                resumed = True
+
+        if not resumed:
+            messages.append(Message(role="user", content=prompt))
 
         agent_span = self.tracer.start_span(self.name, SpanKind.AGENT, self.parent_span_id,
-                                            prompt=_truncate(prompt))
+                                            prompt=_truncate(prompt), resumed=resumed)
         tool_specs = self.tools.specs()
-        total_tool_calls = 0
 
         try:
-            for iteration in range(1, self.max_iterations + 1):
+            for iteration in range(start_iteration, self.max_iterations + 1):
                 if self.context_manager is not None:
                     messages, compacted = self.context_manager.fit(messages)
                     if compacted:
@@ -88,6 +109,7 @@ class Agent:
                 response = await self._call_llm(messages, tool_specs, agent_span.id)
 
                 if not response.wants_tools:
+                    self._checkpoint(messages, iteration, total_tool_calls, done=True)
                     self.tracer.end_span(agent_span, SpanStatus.OK,
                                          iterations=iteration, output=_truncate(response.content))
                     return AgentResult(output=response.content, messages=messages,
@@ -104,6 +126,9 @@ class Agent:
                     messages.append(Message(role="tool", tool_call_id=call.id,
                                             name=call.name, content=result.content))
 
+                # Durable checkpoint after each completed iteration.
+                self._checkpoint(messages, iteration, total_tool_calls, done=False)
+
             self.tracer.end_span(agent_span, SpanStatus.OK, iterations=self.max_iterations,
                                  stopped="max_iterations")
             final = messages[-1].content if messages else ""
@@ -112,6 +137,20 @@ class Agent:
         except Exception as exc:  # noqa: BLE001
             self.tracer.end_span(agent_span, SpanStatus.ERROR, error=str(exc))
             raise
+
+    def _checkpoint(self, messages, iteration: int, tool_calls: int, done: bool) -> None:
+        if self.checkpointer is None or not self.checkpoint_id:
+            return
+        from .checkpoint import serialize_messages
+
+        try:
+            self.checkpointer.save(self.checkpoint_id, {
+                "messages": serialize_messages(messages),
+                "iteration": iteration,
+                "tool_calls": tool_calls,
+            }, done=done)
+        except Exception:  # noqa: BLE001 - checkpointing must never break the run
+            self.tracer.log("checkpoint save failed", checkpoint_id=self.checkpoint_id)
 
     async def _call_llm(self, messages, tool_specs, parent_id):
         span = self.tracer.start_span(f"llm:{self.prefer_provider or 'auto'}", SpanKind.LLM,

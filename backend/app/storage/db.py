@@ -65,6 +65,12 @@ class Store:
                     args_summary TEXT,
                     trace_id TEXT
                 );
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    id TEXT PRIMARY KEY,
+                    updated_at REAL NOT NULL,
+                    done INTEGER NOT NULL DEFAULT 0,
+                    state_json TEXT NOT NULL
+                );
                 CREATE INDEX IF NOT EXISTS idx_runs_module ON runs(module, created_at);
                 CREATE INDEX IF NOT EXISTS idx_mem_kind ON memories(kind, salience);
                 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
@@ -214,6 +220,32 @@ class Store:
             rows = self._conn.execute(
                 "SELECT * FROM audit_log ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
         return [dict(r) for r in rows]
+
+    # -- checkpoints (durable execution) ------------------------------------ #
+
+    def checkpoint_save(self, cp_id: str, state: dict[str, Any], done: bool = False) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO checkpoints (id, updated_at, done, state_json) VALUES (?,?,?,?)"
+                " ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at,"
+                " done=excluded.done, state_json=excluded.state_json",
+                (cp_id, time.time(), 1 if done else 0, json.dumps(state, ensure_ascii=False)),
+            )
+            self._conn.commit()
+
+    def checkpoint_load(self, cp_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT done, state_json FROM checkpoints WHERE id=?", (cp_id,)).fetchone()
+        if not row:
+            return None
+        return {"done": bool(row["done"]), "state": json.loads(row["state_json"])}
+
+    def checkpoint_delete(self, cp_id: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM checkpoints WHERE id=?", (cp_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
 
     def close(self) -> None:
         with self._lock:
