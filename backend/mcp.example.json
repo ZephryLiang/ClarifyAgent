@@ -1,0 +1,13 @@
+{
+  "_comment": "Example MCP server config. Point JOBSEEKER_MCP_CONFIG at a copy of this file. These community servers use YOUR OWN logged-in browser session and run locally; the agent only speaks MCP to them. Review each project's compliance notes before use.",
+  "mcpServers": {
+    "boss-agent": {
+      "command": "uvx",
+      "args": ["--from", "boss-agent-cli[mcp]", "boss-mcp"]
+    },
+    "linkedin": {
+      "command": "python",
+      "args": ["/path/to/linkedin-mcp-server/server.py"]
+    }
+  }
+}
