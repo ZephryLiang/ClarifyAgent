@@ -129,43 +129,6 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
     };
   }, []);
 
-  async function saveProvider(name: string) {
-    setBusy(name);
-    setMsg(null);
-    try {
-      const d = drafts[name];
-      const s = await api.setProviderConfig(name, {
-        api_key: d.api_key || undefined,
-        model: d.model || undefined,
-        base_url: d.base_url || undefined,
-      });
-      setSettings(s);
-      setDrafts((prev) => ({ ...prev, [name]: { ...prev[name], api_key: "" } }));
-      setMsg(`${PROVIDER_LABELS[name] ?? name} 已保存`);
-      onChange?.();
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function clearProvider(name: string) {
-    setBusy(name);
-    try {
-      const s = await api.setProviderConfig(name, { clear_key: true });
-      setSettings(s);
-      setModelOptions((prev) => {
-        const next = { ...prev };
-        delete next[name];
-        return next;
-      });
-      onChange?.();
-    } finally {
-      setBusy(null);
-    }
-  }
-
   async function testProvider(name: string) {
     setTesting(name);
     setMsg(null);
@@ -175,17 +138,49 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
         api_key: d?.api_key || undefined,
         model: d?.model || undefined,
         base_url: d?.base_url || undefined,
+        register: true,
+        label: d?.model || undefined,
       });
       setTestResults((prev) => ({ ...prev, [name]: result }));
-      setMsg(
-        result.ok
-          ? `${PROVIDER_LABELS[name] ?? name} 连接成功 · ${result.latency_ms}ms`
-          : `${PROVIDER_LABELS[name] ?? name} 连接失败：${result.error ?? "未知错误"}`
-      );
+      if (result.ok) {
+        const s = await api.getProviderSettings();
+        setSettings(s);
+        setDrafts((prev) => ({ ...prev, [name]: { ...prev[name], api_key: "" } }));
+        onChange?.();
+        setMsg(
+          result.registered
+            ? `${PROVIDER_LABELS[name] ?? name} 已注册 · ${result.latency_ms}ms`
+            : `${PROVIDER_LABELS[name] ?? name} 连接成功 · ${result.latency_ms}ms`
+        );
+      } else {
+        setMsg(`${PROVIDER_LABELS[name] ?? name} 连接失败：${result.error ?? "未知错误"}`);
+      }
     } catch (e) {
       setMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setTesting(null);
+    }
+  }
+
+  async function activateEntry(provider: string, entryId: string) {
+    setBusy(provider);
+    try {
+      const s = await api.setActiveProviderEntry(provider, entryId);
+      setSettings(s);
+      onChange?.();
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removeEntry(provider: string, entryId: string) {
+    setBusy(provider);
+    try {
+      const s = await api.deleteProviderEntry(provider, entryId);
+      setSettings(s);
+      onChange?.();
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -260,24 +255,71 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
 
       <Card title="Provider 配置">
         <p className="mb-4 text-xs text-[#787774]">
-          填写 API Key 后会自动拉取可选模型（火山引擎等 OpenAI 兼容接口）。选好模型后点{" "}
-          <strong>测试连接</strong> 验证，再保存。
+          每个 Provider 可注册多个 entry（测试连接成功后自动加入）。左下角可切换当前使用的 entry。
         </p>
       </Card>
 
       {settings.providers.map((p: ProviderCatalogItem) => (
         <Card key={p.name} title={PROVIDER_LABELS[p.name] ?? p.name}>
-          <div className="mb-2 flex flex-wrap gap-2 text-xs">
+          <div className="mb-3 flex flex-wrap gap-2 text-xs">
             <span className="text-[#787774]">{p.protocol}</span>
-            {p.configured ? (
-              <span className="text-[#2e7d32]">已配置 {p.api_key_masked ? `(${p.api_key_masked})` : ""}</span>
-            ) : (
-              <span className="text-[#9b9a97]">未配置</span>
-            )}
-            {p.source === "env" ? <span className="text-[#2383e2]">来自 .env</span> : null}
-            {p.source === "ui" ? <span className="text-[#2383e2]">来自界面</span> : null}
+            <span className="text-[#9b9a97]">{p.entry_count ?? 0} 个 entry</span>
             {loadingModels[p.name] ? <span className="text-[#2383e2]">拉取模型中…</span> : null}
           </div>
+
+          {(p.entries ?? []).length > 0 ? (
+            <ul className="mb-4 space-y-2">
+              {(p.entries ?? []).map((ent) => {
+                const isActive = settings.active_provider_entry?.entry_id === ent.id;
+                return (
+                  <li
+                    key={ent.id}
+                    className={`rounded-md border px-3 py-2 text-xs ${
+                      isActive
+                        ? "border-[rgba(35,131,226,0.35)] bg-[rgba(35,131,226,0.06)]"
+                        : "border-[rgba(55,53,47,0.09)] bg-[rgba(55,53,47,0.02)]"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium text-[#37352f] truncate">{ent.label}</p>
+                        <p className="text-[#787774] truncate">{ent.model}</p>
+                        <p className="text-[#9b9a97]">
+                          {ent.api_key_masked}
+                          {ent.latency_ms ? ` · ${ent.latency_ms}ms` : ""}
+                          {isActive ? " · 当前使用" : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        {!isActive ? (
+                          <button
+                            type="button"
+                            className="text-[#2383e2] hover:underline"
+                            disabled={busy === p.name}
+                            onClick={() => void activateEntry(p.name, ent.id)}
+                          >
+                            启用
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="text-[#eb5757] hover:underline"
+                          disabled={busy === p.name}
+                          onClick={() => void removeEntry(p.name, ent.id)}
+                        >
+                          删除
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="mb-3 text-xs text-[#9b9a97]">尚无已注册 entry，填写 Key 后点测试连接。</p>
+          )}
+
+          <p className="mb-2 text-[11px] font-medium text-[#787774]">添加新 entry</p>
           <div className="space-y-2">
             <input
               type="password"
@@ -336,7 +378,7 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
                 disabled={testing === p.name || busy === p.name}
                 onClick={() => void testProvider(p.name)}
               >
-                {testing === p.name ? "测试中…" : "测试连接"}
+                {testing === p.name ? "测试中…" : "测试并注册"}
               </Button>
               {p.protocol === "openai" ? (
                 <Button
@@ -348,14 +390,6 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
                   刷新模型
                 </Button>
               ) : null}
-              <Button size="sm" disabled={busy === p.name} onClick={() => void saveProvider(p.name)}>
-                保存
-              </Button>
-              {p.configured && p.source === "ui" ? (
-                <Button size="sm" variant="ghost" disabled={busy === p.name} onClick={() => void clearProvider(p.name)}>
-                  清除 Key
-                </Button>
-              ) : null}
             </div>
             {testResults[p.name] ? (
               <p
@@ -364,7 +398,7 @@ export function LlmGatewayPanel({ onChange }: { onChange?: () => void }) {
                 }`}
               >
                 {testResults[p.name].ok
-                  ? `✓ ${testResults[p.name].latency_ms}ms · ${testResults[p.name].reply_preview ?? "ok"}`
+                  ? `✓ ${testResults[p.name].latency_ms}ms${testResults[p.name].registered ? " · 已注册" : ""}`
                   : `✗ ${testResults[p.name].error}`}
               </p>
             ) : null}

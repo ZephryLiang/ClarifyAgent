@@ -70,23 +70,19 @@ export interface RuntimeSettings {
   providers: ProviderCatalogItem[];
   provider_priority: string[];
   active_provider?: string | null;
+  active_entry?: ProviderEntry | null;
+  active_provider_entry?: { provider: string; entry_id: string } | null;
 }
 
-export interface ProviderTestResult {
-  ok: boolean;
-  provider: string;
-  model?: string;
-  protocol?: string;
+export interface ProviderEntry {
+  id: string;
+  label: string;
+  model: string;
+  base_url: string;
+  api_key_masked: string | null;
+  created_at?: number;
+  tested_at?: number;
   latency_ms?: number;
-  reply_preview?: string;
-  error?: string;
-}
-
-export interface ProviderModelsResult {
-  ok: boolean;
-  provider: string;
-  models: string[];
-  error?: string;
 }
 
 export interface ProviderCatalogItem {
@@ -99,6 +95,28 @@ export interface ProviderCatalogItem {
   available: boolean;
   api_key_masked: string | null;
   source: "env" | "ui" | "none";
+  entries?: ProviderEntry[];
+  entry_count?: number;
+  active_entry_id?: string;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  provider: string;
+  model?: string;
+  protocol?: string;
+  latency_ms?: number;
+  reply_preview?: string;
+  error?: string;
+  entry_id?: string;
+  registered?: boolean;
+}
+
+export interface ProviderModelsResult {
+  ok: boolean;
+  provider: string;
+  models: string[];
+  error?: string;
 }
 
 export interface Provider {
@@ -114,6 +132,8 @@ export interface Status {
   llm_effective_label?: string;
   providers_configured?: boolean;
   active_provider?: string | null;
+  active_entry?: ProviderEntry | null;
+  active_provider_label?: string | null;
   provider_catalog?: ProviderCatalogItem[];
   provider_priority?: string[];
   providers: Provider[];

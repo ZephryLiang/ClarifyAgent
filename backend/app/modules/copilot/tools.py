@@ -608,6 +608,49 @@ class GenerateJournalTool(Tool):
         return ToolResult(content=md[:3000] or json.dumps(data, ensure_ascii=False)[:2000])
 
 
+class ListActivityTool(Tool):
+    name = "list_activity"
+    description = "列出用户近期求职活动流水（匹配、调研、Gap 等）。用户问「今天做了什么」「上次匹配多少分」时使用。"
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "limit": {"type": "integer", "default": 20},
+            "kind": {"type": "string", "description": "可选过滤：capture_jd, match, gap 等"},
+        },
+    }
+
+    def __init__(self, ctx: CopilotContext) -> None:
+        self.ctx = ctx
+
+    async def run(self, limit: int = 20, kind: str = "", **_: Any) -> ToolResult:
+        events = self.ctx.services.activity.list_since(
+            kind=kind or None, limit=min(limit, 50),
+        )
+        if not events:
+            return ToolResult(content="暂无活动记录。")
+        lines = [f"- [{e.get('kind')}] {e.get('summary')}" for e in events[:limit]]
+        return ToolResult(content="\n".join(lines))
+
+
+class ListSystemUpdatesTool(Tool):
+    name = "list_system_updates"
+    description = "列出系统最近版本更新与功能变更。用户问「有什么新功能」时使用。"
+    parameters: dict[str, Any] = {
+        "type": "object",
+        "properties": {"limit": {"type": "integer", "default": 5}},
+    }
+
+    def __init__(self, ctx: CopilotContext) -> None:
+        self.ctx = ctx
+
+    async def run(self, limit: int = 5, **_: Any) -> ToolResult:
+        releases = self.ctx.services.releases.list_releases(limit=min(limit, 10))
+        if not releases:
+            return ToolResult(content="暂无版本记录。")
+        lines = [f"- v{r.get('version')}: {r.get('title')}" for r in releases]
+        return ToolResult(content="\n".join(lines))
+
+
 def build_copilot_tools(ctx: CopilotContext) -> ToolRegistry:
     tools = [
         UpdateWorkspaceTool(ctx),
@@ -634,6 +677,8 @@ def build_copilot_tools(ctx: CopilotContext) -> ToolRegistry:
         ProposeRetrospectiveTool(ctx),
         RunRetrospectiveTool(ctx),
         GenerateJournalTool(ctx),
+        ListActivityTool(ctx),
+        ListSystemUpdatesTool(ctx),
     ]
     reg = ToolRegistry()
     for t in tools:

@@ -242,7 +242,7 @@ export const api = {
   },
   testProviderConnection: async (
     name: string,
-    body?: { api_key?: string; model?: string; base_url?: string }
+    body?: { api_key?: string; model?: string; base_url?: string; register?: boolean; label?: string }
   ) => {
     const res = await fetch(BASE + `/settings/providers/${encodeURIComponent(name)}/test`, {
       method: "POST",
@@ -269,6 +269,23 @@ export const api = {
       throw new Error(typeof data === "string" ? data : res.statusText);
     }
     return data;
+  },
+  setActiveProviderEntry: async (provider: string, entry_id: string) => {
+    const res = await fetch(BASE + "/settings/active-provider-entry", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, entry_id }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return (await res.json()) as import("./types").RuntimeSettings;
+  },
+  deleteProviderEntry: async (provider: string, entry_id: string) => {
+    const res = await fetch(
+      BASE + `/settings/providers/${encodeURIComponent(provider)}/entries/${encodeURIComponent(entry_id)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return (await res.json()) as import("./types").RuntimeSettings;
   },
   getMetaVersion: async () => {
     const res = await fetch(BASE + "/meta/version");

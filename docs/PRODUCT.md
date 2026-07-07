@@ -22,8 +22,16 @@ ClarifyAgent 是面向主动求职者的 **Chat-first Copilot**，覆盖 JD 解�
 ### C. 面试循环
 `propose_mock_interview` → confirm → `run_mock_interview`；结束后粘贴 transcript → `propose_retrospective` → confirm → `run_retrospective`
 
-### E. Gap 桥接
-匹配分低时建议 `propose_deep_gap_analysis`；Gap 高严重度主题 → `propose_tech_research` → `ProjectAdvisor` 产出项目建议（含反幻觉 warning）
+### E. Gap 桥接（流程 E 剧本）
+
+1. 粘贴 JD + 简历 → `quick_match` 得低分
+2. Copilot 建议 `propose_deep_gap_analysis` → 用户确认 → `run_deep_gap_analysis`
+3. 输出 `GapAnalysis` + `reframe_candidates`（改写角度）与 `new_project` 路径
+4. 用户选新项目 → `propose_tech_research` → 确认 → 多源调研 + `SourceScorer` 评分
+5. `ProjectAdvisor` 产出带引用的 `ProjectProposal`；`ResearchCurator` 沉淀 heuristic 记忆
+6. 附带 `RoleAssessment`；多岗位时更新 `JobMarketReport`
+
+评分 rubric 见 `knowledge_base/research/scoring_rubric.md`；岗位 taxonomy 见 `knowledge_base/roles/taxonomy.md`。
 
 ### F/G. 多 JD 与学习计划
 多份 JD 存入 `workspace.jobs` → `run_requirement_synthesis` → `propose_learning_plan` → 用户用自然语言 `revise_learning_plan`（无 P0/P2 按钮）

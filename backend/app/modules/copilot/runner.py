@@ -127,7 +127,7 @@ class JobSeekerCopilot:
                     "id": text[:8], "company": job.company, "role": job.title, "text": text.strip(),
                 })
                 ctx.log_activity("capture_jd", f"保存 JD · {job.company}")
-                touch_session_meta(session, job.company or job.title)
+                touch_session_meta(ctx.session, job.company or job.title)
                 return (
                     f"已保存 JD（{job.company} · {job.title}）。\n"
                     "离线模式：可选 [只解读 JD] [快速匹配-需简历] [继续添加 JD]。"

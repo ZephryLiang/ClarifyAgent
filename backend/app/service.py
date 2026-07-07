@@ -26,11 +26,17 @@ from .modules import (
 )
 from .modules.llm_config import (
     apply_stored_priority,
-    apply_stored_provider_config,
-    provider_catalog,
     reload_settings_with_store,
     test_provider_connection,
     list_provider_models,
+)
+from .modules.provider_registry import (
+    apply_registry_to_settings,
+    catalog_with_entries,
+    delete_entry,
+    load_registry,
+    register_entry,
+    set_active_entry,
 )
 from .modules.activity_ledger import ActivityLedger
 from .modules.copilot import JobSeekerCopilot, create_session
@@ -104,17 +110,52 @@ class AppServices:
         raw = self.store.setting_get("provider_keys")
         return dict(raw) if isinstance(raw, dict) else {}
 
+    def _load_registry(self) -> dict[str, Any]:
+        raw = self.store.setting_get("provider_registry")
+        reg = load_registry(raw, self._stored_keys())
+        if raw != reg and reg.get("entries"):
+            self.store.setting_set("provider_registry", reg)
+        return reg
+
+    def _save_registry(self, registry: dict[str, Any]) -> None:
+        self.store.setting_set("provider_registry", registry)
+
+    def _legacy_keys_from_registry(self, registry: dict[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        active = registry.get("active")
+        for pname, entries in (registry.get("entries") or {}).items():
+            if not entries:
+                continue
+            ent = entries[0]
+            if active and active.get("provider") == pname:
+                for e in entries:
+                    if e.get("id") == active.get("entry_id"):
+                        ent = e
+                        break
+            out[pname] = {
+                "api_key": ent.get("api_key"),
+                "model": ent.get("model"),
+                "base_url": ent.get("base_url"),
+            }
+        return out
+
     def _apply_stored_provider_config(self) -> None:
-        apply_stored_provider_config(self.settings, self._stored_keys())
+        registry = self._load_registry()
         prio = self.store.setting_get("provider_priority")
+        legacy = self._legacy_keys_from_registry(registry)
+        self.settings = reload_settings_with_store(legacy, prio)
+        apply_registry_to_settings(self.settings, registry)
         apply_stored_priority(self.settings, prio)
 
     def rebuild_gateway(self) -> None:
-        """Reload env + SQLite keys and refresh adapters without replacing Gateway."""
+        """Reload env + SQLite registry and refresh adapters without replacing Gateway."""
         mode = self.gateway.llm_mode
-        stored = self._stored_keys()
+        registry = self._load_registry()
         prio = self.store.setting_get("provider_priority")
-        self.settings = reload_settings_with_store(stored, prio)
+        legacy = self._legacy_keys_from_registry(registry)
+        self.settings = reload_settings_with_store(legacy, prio)
+        apply_registry_to_settings(self.settings, registry)
+        apply_stored_priority(self.settings, prio)
         self.gateway.refresh(self.settings)
         self.gateway.set_llm_mode(mode)
         self._rewire_gateway_modules()
@@ -137,12 +178,28 @@ class AppServices:
         self.role_assessor.gateway = gw
 
     def provider_settings(self) -> dict[str, object]:
-        stored = self._stored_keys()
-        catalog = provider_catalog(self.settings, stored)
+        registry = self._load_registry()
+        catalog = catalog_with_entries(
+            self.settings, registry, request_timeout=self.settings.request_timeout,
+        )
+        active = registry.get("active")
+        active_provider = None
+        active_entry = None
+        if active:
+            active_provider = active.get("provider")
+            for p in catalog:
+                if p["name"] == active_provider:
+                    active_entry = next(
+                        (e for e in p.get("entries", []) if e.get("id") == active.get("entry_id")),
+                        None,
+                    )
+                    break
         return {
             "providers": catalog,
             "provider_priority": list(self.settings.provider_priority),
             "active_provider": self.gateway.active_provider_name(),
+            "active_entry": active_entry,
+            "active_provider_entry": active,
             **self.gateway.runtime_info(),
         }
 
@@ -158,30 +215,40 @@ class AppServices:
         cfg = self.settings.get_provider(name)
         if cfg is None:
             raise ValueError(f"unknown provider: {name}")
-        stored = self._stored_keys()
-        entry = dict(stored.get(name) or {})
+        registry = self._load_registry()
         if clear_key:
-            entry.pop("api_key", None)
-            if not entry:
-                stored.pop(name, None)
-            else:
-                stored[name] = entry
-        else:
-            if api_key is not None:
-                key = api_key.strip()
-                if key:
-                    entry["api_key"] = key
-                else:
-                    entry.pop("api_key", None)
-            if model is not None and model.strip():
-                entry["model"] = model.strip()
-            if base_url is not None:
-                entry["base_url"] = base_url.strip()
-            if entry:
-                stored[name] = entry
-            elif name in stored:
-                del stored[name]
-        self.store.setting_set("provider_keys", stored)
+            registry.setdefault("entries", {}).pop(name, None)
+            if registry.get("active", {}).get("provider") == name:
+                from .modules.provider_registry import pick_default_active
+                registry["active"] = pick_default_active(registry)
+            self._save_registry(registry)
+            self.rebuild_gateway()
+            return self.provider_settings()
+        if api_key and api_key.strip():
+            register_entry(
+                registry,
+                name,
+                api_key=api_key.strip(),
+                model=(model or cfg.model or "").strip(),
+                base_url=(base_url if base_url is not None else cfg.base_url or "").strip(),
+                label=(model or cfg.model or name).strip(),
+            )
+            self._save_registry(registry)
+            self.rebuild_gateway()
+        return self.provider_settings()
+
+    def set_active_provider_entry(self, provider: str, entry_id: str) -> dict[str, object]:
+        registry = self._load_registry()
+        set_active_entry(registry, provider, entry_id)
+        self._save_registry(registry)
+        self.rebuild_gateway()
+        return self.provider_settings()
+
+    def delete_provider_entry(self, provider: str, entry_id: str) -> dict[str, object]:
+        registry = self._load_registry()
+        if not delete_entry(registry, provider, entry_id):
+            raise ValueError(f"entry not found: {provider}/{entry_id}")
+        self._save_registry(registry)
         self.rebuild_gateway()
         return self.provider_settings()
 
@@ -198,16 +265,38 @@ class AppServices:
         api_key: str | None = None,
         model: str | None = None,
         base_url: str | None = None,
+        *,
+        register: bool = True,
+        label: str | None = None,
     ) -> dict[str, object]:
-        return test_provider_connection(
+        legacy = self._legacy_keys_from_registry(self._load_registry())
+        result = test_provider_connection(
             self.settings,
             name,
-            self._stored_keys(),
+            legacy,
             api_key=api_key,
             model=model,
             base_url=base_url,
             timeout=self.settings.request_timeout,
         )
+        if result.get("ok") and register and api_key and api_key.strip():
+            registry = self._load_registry()
+            cfg = self.settings.get_provider(name)
+            ent = register_entry(
+                registry,
+                name,
+                api_key=api_key.strip(),
+                model=(model or result.get("model") or (cfg.model if cfg else "") or "").strip(),
+                base_url=(base_url if base_url is not None else (cfg.base_url if cfg else "") or "").strip(),
+                label=label or (model or result.get("model") or name),
+                latency_ms=result.get("latency_ms"),
+                set_active=True,
+            )
+            self._save_registry(registry)
+            self.rebuild_gateway()
+            result["entry_id"] = ent["id"]
+            result["registered"] = True
+        return result
 
     def list_provider_models(
         self,
@@ -215,10 +304,11 @@ class AppServices:
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> dict[str, object]:
+        legacy = self._legacy_keys_from_registry(self._load_registry())
         return list_provider_models(
             self.settings,
             name,
-            self._stored_keys(),
+            legacy,
             api_key=api_key,
             base_url=base_url,
             timeout=self.settings.request_timeout,
@@ -259,12 +349,18 @@ class AppServices:
 
     def status(self) -> dict:
         runtime = self.runtime_settings()
+        active_entry = runtime.get("active_entry")
+        label = None
+        if active_entry:
+            label = f"{runtime.get('active_provider_entry', {}).get('provider')}/{active_entry.get('label')}"
         return {
             "llm_enabled": runtime["llm_enabled"],
             "llm_mode": runtime["llm_mode"],
             "llm_effective_label": runtime["llm_effective_label"],
             "providers_configured": runtime["providers_configured"],
             "active_provider": runtime.get("active_provider"),
+            "active_entry": active_entry,
+            "active_provider_label": label,
             "providers": self.gateway.describe(),
             "provider_catalog": runtime.get("providers"),
             "provider_priority": runtime.get("provider_priority"),

@@ -13,6 +13,7 @@ import { GovernancePanel } from "./components/GovernancePanel";
 import { CopilotChat } from "./components/CopilotChat";
 import { EvalsPanel } from "./components/EvalsPanel";
 import { VersionBanner } from "./components/VersionBanner";
+import { ProviderSwitcher } from "./components/ProviderSwitcher";
 import { StatusDot } from "./components/ui";
 
 type Tab = "copilot" | "rewrite" | "match" | "outreach" | "interview" | "retro" | "memory" | "llm" | "gov" | "evals";
@@ -124,21 +125,24 @@ export default function App() {
         </nav>
 
         <div className="border-t border-[rgba(55,53,47,0.09)] px-3 py-3 space-y-2">
+          <ProviderSwitcher
+            status={status}
+            onChange={refreshStatus}
+            onOpenGateway={() => setTab("llm")}
+          />
           {status ? (
-            <>
-              <div className="flex items-center gap-2 text-xs text-[#787774]">
-                <StatusDot ok={status.llm_enabled} />
-                <span>
-                  {status.llm_mode === "offline"
-                    ? "强制离线"
-                    : status.llm_enabled
-                      ? status.active_provider ?? "LLM 在线"
-                      : status.llm_mode === "online"
-                        ? "在线(未配置)"
-                        : "自动·离线"}
-                </span>
-              </div>
-            </>
+            <div className="flex items-center gap-2 text-xs text-[#787774]">
+              <StatusDot ok={status.llm_enabled} />
+              <span>
+                {status.llm_mode === "offline"
+                  ? "强制离线"
+                  : status.llm_enabled
+                    ? status.active_provider ?? "LLM 在线"
+                    : status.llm_mode === "online"
+                      ? "在线(未配置)"
+                      : "自动·离线"}
+              </span>
+            </div>
           ) : (
             <span className="text-xs text-[#9b9a97]">连接中…</span>
           )}

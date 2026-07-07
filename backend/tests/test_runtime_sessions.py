@@ -73,6 +73,31 @@ def test_list_provider_models_with_mock():
     assert r["models"][0].startswith("ep-")
 
 
+def test_provider_entry_register_and_switch():
+    from unittest.mock import patch
+
+    from app.gateway.base import ChatResponse
+    from tests.fakes import FakeProvider
+
+    svc = AppServices()
+    fake = FakeProvider("deepseek", [ChatResponse(content="ok", model="deepseek-chat")])
+    with patch("app.modules.llm_config.build_provider", return_value=fake):
+        result = svc.test_provider(
+            "deepseek",
+            api_key="sk-test-key-12345678",
+            model="deepseek-chat",
+            register=True,
+        )
+    assert result["ok"] is True
+    assert result.get("registered") is True
+    entry_id = result["entry_id"]
+    svc.set_active_provider_entry("deepseek", entry_id)
+    settings = svc.provider_settings()
+    assert settings["active_provider_entry"]["entry_id"] == entry_id
+    deepseek = next(p for p in settings["providers"] if p["name"] == "deepseek")
+    assert any(e["id"] == entry_id for e in deepseek.get("entries", []))
+
+
 def test_provider_key_persist_and_reload():
     svc = AppServices()
     result = svc.set_provider_config("deepseek", api_key="sk-test-key-12345678", model="deepseek-chat")

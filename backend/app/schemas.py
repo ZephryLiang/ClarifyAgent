@@ -98,6 +98,13 @@ class ProviderTestRequest(BaseModel):
     api_key: str | None = Field(None, description="可选：用表单中的 Key 测试（不保存）")
     model: str | None = None
     base_url: str | None = None
+    register: bool = Field(True, description="测试成功后自动注册为 entry")
+    label: str | None = Field(None, description="注册 entry 的显示名")
+
+
+class SetActiveProviderEntryRequest(BaseModel):
+    provider: str
+    entry_id: str
 
 
 class ProviderPriorityRequest(BaseModel):

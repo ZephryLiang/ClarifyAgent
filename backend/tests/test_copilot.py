@@ -28,9 +28,11 @@ SAMPLE_RESUME = """
 @pytest.mark.asyncio
 async def test_copilot_offline_captures_jd():
     svc = AppServices()
+    svc.set_llm_mode("offline")
     session = create_session()
-    turn = await svc.copilot.handle_message(session, SAMPLE_JD)
-    assert "JD" in turn.assistant_message or "保存" in turn.assistant_message
+    long_jd = SAMPLE_JD + "\n" + ("熟悉 Go Python Kubernetes 分布式。\n" * 15)
+    turn = await svc.copilot.handle_message(session, long_jd)
+    assert "保存" in turn.assistant_message
     assert session["workspace"].get("job_text")
 
 
@@ -57,6 +59,33 @@ def test_requirement_synthesis_and_plan():
     )
     assert plan.phases
     assert plan.time_budget["total_hours"] == 40
+
+
+@pytest.mark.asyncio
+async def test_copilot_propose_confirm_match_offline():
+    """Offline path: proposal is created via tool; confirm consumes it."""
+    from app.modules.copilot.context import CopilotContext
+    from app.modules.copilot.tools import ProposeMatchTool, RunMatchTool
+    from app.harness import Tracer
+
+    svc = AppServices()
+    session = create_session()
+    session["workspace"]["resume_text"] = SAMPLE_RESUME
+    session["workspace"]["job_text"] = SAMPLE_JD
+    tracer = Tracer()
+    ledger = svc.activity
+    ctx = CopilotContext(session=session, services=svc, tracer=tracer, ledger=ledger)
+
+    propose = ProposeMatchTool(ctx)
+    prop_result = await propose.run()
+    assert session.get("pending_proposal")
+    prop_id = session["pending_proposal"]["id"]
+
+    session["proposal_approved_id"] = prop_id
+    run = RunMatchTool(ctx)
+    run_result = await run.run(proposal_id=prop_id)
+    assert not run_result.is_error
+    assert any(a["kind"] == "match_report" for a in session.get("artifacts", []))
 
 
 @pytest.mark.asyncio

@@ -25,6 +25,7 @@ from .schemas import (
     ProviderConfigRequest,
     ProviderPriorityRequest,
     ProviderTestRequest,
+    SetActiveProviderEntryRequest,
     ExportRequest,
     InterviewAnswerRequest,
     InterviewStartRequest,
@@ -170,6 +171,8 @@ async def test_provider_connection(provider_name: str, req: ProviderTestRequest 
             api_key=body.api_key,
             model=body.model,
             base_url=body.base_url,
+            register=body.register,
+            label=body.label,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -184,6 +187,22 @@ async def list_provider_models(provider_name: str, req: ProviderTestRequest | No
             api_key=body.api_key,
             base_url=body.base_url,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/settings/active-provider-entry")
+async def set_active_provider_entry(req: SetActiveProviderEntryRequest) -> dict[str, Any]:
+    try:
+        return services.set_active_provider_entry(req.provider, req.entry_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.delete("/api/settings/providers/{provider_name}/entries/{entry_id}")
+async def delete_provider_entry(provider_name: str, entry_id: str) -> dict[str, Any]:
+    try:
+        return services.delete_provider_entry(provider_name, entry_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
