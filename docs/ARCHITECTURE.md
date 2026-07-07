@@ -79,6 +79,22 @@ Client ──POST /api/match (stream)──► FastAPI
 Client 前端：实时渲染 span 时间线 + 最终报告
 ```
 
+## 4c. Copilot 对话时序（turn-by-turn）
+
+```
+Client ──POST /api/chat/sessions──► 创建 session + workspace
+Client ──POST /api/chat/sessions/{id}/message (SSE)──► JobSeekerCopilot.handle_message
+  用户粘贴 JD → update_workspace（保存，不自动跑重流程）
+  Agent 询问意图 → 用户选择 chip / 自然语言
+  轻操作：run_jd_analysis / research_company / quick_match（直接 artifact）
+  重操作：propose_* → SSE proposal 事件 → 用户 confirm
+Client ──POST /api/chat/sessions/{id}/confirm (SSE)──► confirm_proposal
+  Agent 收到 [CONFIRMED:proposal_id] → run_* 工具 → artifact + activity_events(H1)
+  TechResearch 完成后 ResearchCurator 沉淀 heuristic 记忆
+Client ArtifactPanel 展示 jd_analysis / match_report / learning_plan 等
+Copilot workspace 同步至 legacy Tab（resume / job / company）
+```
+
 ## 4b. 对照 ETCLOVG 七层(Agent Harness Engineering: A Survey, 2026)
 
 | 层 | 落点 | 状态 |

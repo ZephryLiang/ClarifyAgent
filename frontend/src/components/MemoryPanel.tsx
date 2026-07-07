@@ -9,7 +9,7 @@ interface JournalData {
   date: string;
 }
 
-const KINDS = ["insight", "principle", "preference", "fact", "recurring"];
+const KINDS = ["insight", "principle", "preference", "fact", "recurring", "heuristic"];
 
 const KIND_TONE: Record<string, string> = {
   insight: "indigo",
@@ -17,6 +17,7 @@ const KIND_TONE: Record<string, string> = {
   preference: "amber",
   fact: "slate",
   recurring: "red",
+  heuristic: "indigo",
 };
 
 export function MemoryPanel() {
@@ -44,6 +45,15 @@ export function MemoryPanel() {
   async function remove(id: string) {
     await api.deleteMemory(id);
     refresh();
+  }
+  async function genWeekJournal() {
+    setBusy(true);
+    try {
+      const res = await api.journalWeek();
+      setJournal({ markdown: res.result.markdown, stats: res.result.stats, date: res.result.date });
+    } finally {
+      setBusy(false);
+    }
   }
   async function genJournal() {
     setBusy(true);
@@ -111,6 +121,7 @@ export function MemoryPanel() {
         <Card title="今日日报">
           <div className="flex gap-2">
             <Button onClick={genJournal} disabled={busy}>{busy ? "生成中…" : "生成今日日报"}</Button>
+            <Button variant="ghost" onClick={genWeekJournal} disabled={busy}>本周周报</Button>
             <Button variant="ghost" onClick={exportJournal}>导出到 Obsidian</Button>
           </div>
           {exportPath ? <p className="mt-2 text-xs text-emerald-400">已导出: {exportPath}</p> : null}

@@ -58,13 +58,18 @@ class JournalWriter:
         self.gateway = gateway
 
     @staticmethod
-    def _today_start() -> float:
+    def _period_start(period: str) -> float:
         now = datetime.now()
+        if period == "week":
+            from datetime import timedelta
+            start = now - timedelta(days=now.weekday())
+            return datetime(start.year, start.month, start.day).timestamp()
         return datetime(now.year, now.month, now.day).timestamp()
 
-    def _collect(self) -> dict[str, Any]:
-        start = self._today_start()
+    def _collect(self, period: str = "day") -> dict[str, Any]:
+        start = self._period_start(period)
         runs = [r for r in self.store.runs_since(start) if r["module"] != "journal"]
+        activities = self.store.activity_list(since_ts=start, limit=200)
         stats: dict[str, int] = {}
         highlights: list[str] = []
         for r in runs:
@@ -77,24 +82,29 @@ class JournalWriter:
                 highlights.append(f"改写 {len(res.get('suggestions', []))} 条简历经历")
             elif r["module"] == "retrospective" and res.get("strengths"):
                 highlights.append("完成一次面试复盘")
+        for a in activities:
+            highlights.append(a.get("summary", ""))
+            stats[a.get("kind", "activity")] = stats.get(a.get("kind", "activity"), 0) + 1
         new_memories = [m for m in self.memory.list() if m.created_at >= start]
         recurring = [m for m in self.memory.list() if m.salience >= 2][:8]
-        return {"runs": runs, "stats": stats, "highlights": highlights[:8],
-                "new_memories": new_memories, "recurring": recurring}
+        return {"runs": runs, "stats": stats, "highlights": highlights[:12],
+                "new_memories": new_memories, "recurring": recurring, "activities": activities}
 
-    async def run(self, tracer: Tracer | None = None) -> JournalResult:
+    async def run(self, tracer: Tracer | None = None, period: str = "day") -> JournalResult:
         tracer = tracer or Tracer()
         span = tracer.start_span("journal", SpanKind.AGENT, has_llm=llm_available(self.gateway))
         try:
             date = datetime.now().strftime("%Y-%m-%d")
-            data = self._collect()
+            if period == "week":
+                date = datetime.now().strftime("%Y-W%W")
+            data = self._collect(period)
             stats = data["stats"]
 
             if llm_available(self.gateway):
-                markdown = await self._narrative(date, data, tracer, span.id)
+                markdown = await self._narrative(date, data, tracer, span.id, period)
                 used = True
             else:
-                markdown = self._template(date, data)
+                markdown = self._template(date, data, period)
                 used = False
 
             result = JournalResult(date=date, markdown=markdown, stats=stats,
@@ -105,9 +115,12 @@ class JournalWriter:
             tracer.end_span(span, SpanStatus.ERROR, error=str(exc))
             raise
 
-    async def _narrative(self, date: str, data: dict[str, Any], tracer: Tracer, parent_id: str) -> str:
+    async def _narrative(self, date: str, data: dict[str, Any], tracer: Tracer, parent_id: str,
+                         period: str = "day") -> str:
         assert self.gateway is not None
-        agent = Agent(self.gateway, ToolRegistry(), tracer, system=_SYSTEM,
+        label = "周报" if period == "week" else "日报"
+        agent = Agent(self.gateway, ToolRegistry(), tracer,
+                      system=_SYSTEM.replace("今日日报", label),
                       name="journal-writer", temperature=0.5, parent_span_id=parent_id)
         payload = {
             "date": date,
@@ -118,11 +131,12 @@ class JournalWriter:
         }
         import json
 
-        out = await agent.run("当日数据:\n" + json.dumps(payload, ensure_ascii=False, indent=2))
-        return out.output.strip() or self._template(date, data)
+        out = await agent.run(f"{'本周' if period == 'week' else '当日'}数据:\n" + json.dumps(payload, ensure_ascii=False, indent=2))
+        return out.output.strip() or self._template(date, data, period)
 
-    def _template(self, date: str, data: dict[str, Any]) -> str:
-        lines = [f"# 今日求职日报 · {date}", "", "## 概览"]
+    def _template(self, date: str, data: dict[str, Any], period: str = "day") -> str:
+        title = f"# 本周求职周报 · {date}" if period == "week" else f"# 今日求职日报 · {date}"
+        lines = [title, "", "## 概览"]
         if data["stats"]:
             for mod, n in data["stats"].items():
                 lines.append(f"- {_MODULE_LABELS.get(mod, mod)}: {n} 次")

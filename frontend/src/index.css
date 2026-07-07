@@ -1,7 +1,21 @@
 @import "tailwindcss";
 
+/* Notion-inspired design tokens */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
+  --notion-bg: #ffffff;
+  --notion-sidebar: #f7f6f3;
+  --notion-canvas: #fbfbfa;
+  --notion-text: #37352f;
+  --notion-text-secondary: #787774;
+  --notion-text-muted: #9b9a97;
+  --notion-border: rgba(55, 53, 47, 0.09);
+  --notion-border-strong: rgba(55, 53, 47, 0.16);
+  --notion-hover: rgba(55, 53, 47, 0.06);
+  --notion-active: rgba(55, 53, 47, 0.08);
+  --notion-blue: #2383e2;
+  --notion-blue-bg: rgba(35, 131, 226, 0.08);
+  --notion-callout: rgba(35, 131, 226, 0.06);
 }
 
 html,
@@ -12,13 +26,29 @@ body,
 
 body {
   margin: 0;
-  background-color: #0b0f19;
-  color: #e5e7eb;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
-    "Microsoft YaHei", sans-serif;
+  background-color: var(--notion-canvas);
+  color: var(--notion-text);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica,
+    "PingFang SC", "Microsoft YaHei", "Apple Color Emoji", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: rgba(55, 53, 47, 0.15) transparent;
+}
+
+::selection {
+  background: rgba(35, 131, 226, 0.2);
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.15s ease-out;
 }

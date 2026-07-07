@@ -43,6 +43,8 @@ class Gateway:
     ) -> None:
         self.settings = settings or default_settings
         self.max_retries = max_retries
+        # Runtime override: auto | offline | online (persisted via app_settings).
+        self.llm_mode: str = "auto"
         if providers is not None:
             self._providers = providers
         else:
@@ -55,8 +57,45 @@ class Gateway:
     def providers(self) -> list[ChatProvider]:
         return self._providers
 
-    def available(self) -> bool:
+    def providers_configured(self) -> bool:
         return any(p.available() for p in self._providers)
+
+    def available(self) -> bool:
+        """Whether the app should use LLM for this request."""
+        if self.llm_mode == "offline":
+            return False
+        return self.providers_configured()
+
+    def set_llm_mode(self, mode: str) -> None:
+        if mode not in ("auto", "offline", "online"):
+            raise ValueError(f"invalid llm_mode: {mode}")
+        self.llm_mode = mode
+
+    def runtime_info(self) -> dict[str, object]:
+        configured = self.providers_configured()
+        effective = self.available()
+        return {
+            "llm_mode": self.llm_mode,
+            "providers_configured": configured,
+            "llm_enabled": effective,
+            "llm_effective_label": (
+                "offline" if self.llm_mode == "offline"
+                else ("online" if effective else ("unconfigured" if self.llm_mode == "online" else "offline"))
+            ),
+        }
+
+    def refresh(self, settings: Settings | None = None) -> None:
+        """Rebuild provider adapters in-place (modules keep the same Gateway ref)."""
+        if settings is not None:
+            self.settings = settings
+        self._providers = [
+            build_provider(cfg, self.settings.request_timeout)
+            for cfg in self.settings.resolved_priority()
+        ]
+
+    def active_provider_name(self) -> str | None:
+        usable = self._ordered(None)
+        return usable[0].name if usable else None
 
     def _ordered(self, prefer: str | None) -> list[ChatProvider]:
         usable = [p for p in self._providers if p.available()]

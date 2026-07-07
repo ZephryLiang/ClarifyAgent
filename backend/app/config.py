@@ -11,6 +11,8 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+APP_VERSION = os.getenv("JOBSEEKER_APP_VERSION", "0.2.0")
+
 # Repository / package paths.
 APP_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = APP_DIR.parent
@@ -59,6 +61,13 @@ _DEFAULT_PROVIDERS: list[ProviderConfig] = [
                    "MOONSHOT_API_KEY", os.getenv("MOONSHOT_BASE_URL", "https://api.moonshot.cn/v1")),
     ProviderConfig("zhipu", "openai", os.getenv("ZHIPU_MODEL", "glm-4-flash"),
                    "ZHIPU_API_KEY", os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")),
+    ProviderConfig(
+        "volcengine",
+        "openai",
+        os.getenv("VOLCENGINE_MODEL", "doubao-1-5-pro-32k-250115"),
+        "VOLCENGINE_API_KEY",
+        os.getenv("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+    ),
 ]
 
 
@@ -112,7 +121,7 @@ def _priority_list() -> list[str]:
     raw = os.getenv("JOBSEEKER_PROVIDER_PRIORITY")
     if raw:
         return [x.strip() for x in raw.split(",") if x.strip()]
-    return ["anthropic", "openai", "deepseek", "qwen", "moonshot", "zhipu"]
+    return ["anthropic", "openai", "deepseek", "qwen", "moonshot", "zhipu", "volcengine"]
 
 
 def load_settings() -> Settings:

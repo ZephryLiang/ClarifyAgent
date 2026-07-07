@@ -66,3 +66,48 @@ class JudgeRequest(BaseModel):
     content: str
     criteria: list[str] = Field(default_factory=list)
     artifact_type: str = "文本"
+
+
+class ChatMessageRequest(BaseModel):
+    text: str = Field(..., description="用户消息")
+
+
+class ChatSessionCreateRequest(BaseModel):
+    resume_text: str = ""
+    job_text: str = ""
+    company: str = ""
+    title: str = ""
+
+
+class ChatSessionUpdateRequest(BaseModel):
+    title: str | None = None
+
+
+class RuntimeSettingsRequest(BaseModel):
+    llm_mode: str = Field(..., description="auto | offline | online")
+
+
+class ProviderConfigRequest(BaseModel):
+    api_key: str | None = Field(None, description="留空表示不修改；传空字符串清除")
+    model: str | None = None
+    base_url: str | None = None
+    clear_key: bool = False
+
+
+class ProviderTestRequest(BaseModel):
+    api_key: str | None = Field(None, description="可选：用表单中的 Key 测试（不保存）")
+    model: str | None = None
+    base_url: str | None = None
+
+
+class ProviderPriorityRequest(BaseModel):
+    priority: list[str] = Field(..., min_length=1)
+
+
+class ChatConfirmRequest(BaseModel):
+    proposal_id: str
+    action: str = Field("approve", description="approve | reject")
+
+
+class JournalRequest(BaseModel):
+    period: str = Field("day", description="day | week")

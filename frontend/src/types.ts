@@ -21,14 +21,84 @@ export interface TraceSummary {
 }
 
 export interface StreamEvent {
-  type: "span_start" | "span_end" | "log" | "result" | "error";
+  type: "span_start" | "span_end" | "log" | "result" | "error" | "artifact" | "proposal" | "done";
   trace_id?: string;
   span?: Span;
   message?: string;
   result?: unknown;
   trace?: TraceSummary;
   run_id?: string;
+  artifact?: Artifact;
+  proposal?: Record<string, unknown>;
+  session?: ChatSession;
   [k: string]: unknown;
+}
+
+export interface Artifact {
+  id: string;
+  kind: string;
+  data: Record<string, unknown>;
+  created_at?: number;
+}
+
+export interface ChatSession {
+  id: string;
+  title?: string;
+  created_at?: number;
+  updated_at?: number;
+  messages: { role: string; content: string; ts?: number }[];
+  workspace: Record<string, unknown>;
+  artifacts: Artifact[];
+  pending_proposal?: Record<string, unknown> | null;
+}
+
+export interface ChatSessionSummary {
+  id: string;
+  title: string;
+  preview: string;
+  message_count: number;
+  company: string;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface RuntimeSettings {
+  llm_mode: "auto" | "offline" | "online";
+  llm_enabled: boolean;
+  llm_effective_label: string;
+  providers_configured: boolean;
+  providers: ProviderCatalogItem[];
+  provider_priority: string[];
+  active_provider?: string | null;
+}
+
+export interface ProviderTestResult {
+  ok: boolean;
+  provider: string;
+  model?: string;
+  protocol?: string;
+  latency_ms?: number;
+  reply_preview?: string;
+  error?: string;
+}
+
+export interface ProviderModelsResult {
+  ok: boolean;
+  provider: string;
+  models: string[];
+  error?: string;
+}
+
+export interface ProviderCatalogItem {
+  name: string;
+  protocol: string;
+  model: string;
+  base_url: string;
+  api_key_env: string;
+  configured: boolean;
+  available: boolean;
+  api_key_masked: string | null;
+  source: "env" | "ui" | "none";
 }
 
 export interface Provider {
@@ -40,10 +110,17 @@ export interface Provider {
 
 export interface Status {
   llm_enabled: boolean;
+  llm_mode?: string;
+  llm_effective_label?: string;
+  providers_configured?: boolean;
+  active_provider?: string | null;
+  provider_catalog?: ProviderCatalogItem[];
+  provider_priority?: string[];
   providers: Provider[];
   tools: string[];
   mcp_notes: string[];
   default_priority: string[];
+  app_version?: string;
 }
 
 export interface Faithfulness {

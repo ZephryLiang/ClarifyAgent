@@ -8,7 +8,7 @@ from typing import Any
 # Recognised memory kinds. ``insight``/``principle`` are durable knowledge;
 # ``preference`` captures stable user choices; ``fact`` is a concrete detail;
 # ``recurring`` is anything reinforced repeatedly.
-MEMORY_KINDS = ("insight", "principle", "preference", "fact", "recurring")
+MEMORY_KINDS = ("insight", "principle", "preference", "fact", "recurring", "heuristic")
 
 
 @dataclass

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -13,14 +14,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .evals import replay_run
 from .harness import Tracer
 from .observability import analyze_trace
 from .schemas import (
+    ChatConfirmRequest,
+    ChatMessageRequest,
+    ChatSessionCreateRequest,
+    ChatSessionUpdateRequest,
+    RuntimeSettingsRequest,
+    ProviderConfigRequest,
+    ProviderPriorityRequest,
+    ProviderTestRequest,
     ExportRequest,
     InterviewAnswerRequest,
     InterviewStartRequest,
     JudgeRequest,
+    JournalRequest,
     MatchRequest,
     MemoryCreateRequest,
     MemoryUpdateRequest,
@@ -28,6 +37,7 @@ from .schemas import (
     RetrospectiveRequest,
     RewriteRequest,
 )
+from .modules.copilot import create_session
 from .service import AppServices
 
 app = FastAPI(title="求职 Agent", version="0.1.0",
@@ -117,6 +127,200 @@ async def health() -> dict[str, str]:
 @app.get("/api/status")
 async def status() -> dict[str, Any]:
     return services.status()
+
+
+@app.get("/api/settings/runtime")
+async def get_runtime_settings() -> dict[str, Any]:
+    return services.runtime_settings()
+
+
+@app.put("/api/settings/runtime")
+async def set_runtime_settings(req: RuntimeSettingsRequest) -> dict[str, Any]:
+    try:
+        return services.set_llm_mode(req.llm_mode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/settings/providers")
+async def get_provider_settings() -> dict[str, Any]:
+    return services.provider_settings()
+
+
+@app.put("/api/settings/providers/{provider_name}")
+async def set_provider_settings(provider_name: str, req: ProviderConfigRequest) -> dict[str, Any]:
+    try:
+        return services.set_provider_config(
+            provider_name,
+            api_key=req.api_key,
+            model=req.model,
+            base_url=req.base_url,
+            clear_key=req.clear_key,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/settings/providers/{provider_name}/test")
+async def test_provider_connection(provider_name: str, req: ProviderTestRequest | None = None) -> dict[str, Any]:
+    body = req or ProviderTestRequest()
+    try:
+        return services.test_provider(
+            provider_name,
+            api_key=body.api_key,
+            model=body.model,
+            base_url=body.base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/settings/providers/{provider_name}/models")
+async def list_provider_models(provider_name: str, req: ProviderTestRequest | None = None) -> dict[str, Any]:
+    body = req or ProviderTestRequest()
+    try:
+        return services.list_provider_models(
+            provider_name,
+            api_key=body.api_key,
+            base_url=body.base_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.put("/api/settings/provider-priority")
+async def set_provider_priority(req: ProviderPriorityRequest) -> dict[str, Any]:
+    try:
+        return services.set_provider_priority(req.priority)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Meta: version / changelog / activity
+# --------------------------------------------------------------------------- #
+
+@app.get("/api/meta/version")
+async def meta_version() -> dict[str, Any]:
+    from .config import APP_VERSION
+    info = services.releases.current_version()
+    return {"version": APP_VERSION, **info}
+
+
+@app.get("/api/meta/changelog")
+async def meta_changelog(limit: int = 10) -> dict[str, Any]:
+    return {"releases": services.releases.list_releases(limit=limit)}
+
+
+@app.get("/api/meta/changes")
+async def meta_changes(since: float = 0) -> dict[str, Any]:
+    return {"changes": services.releases.list_changes_since(since)}
+
+
+@app.get("/api/activity")
+async def list_activity(since: float = 0, kind: str | None = None, limit: int = 100) -> dict[str, Any]:
+    return {"events": services.activity.list_since(since, kind, limit)}
+
+
+# --------------------------------------------------------------------------- #
+# Copilot chat
+# --------------------------------------------------------------------------- #
+
+@app.post("/api/chat/sessions")
+async def chat_create_session(req: ChatSessionCreateRequest | None = None) -> dict[str, Any]:
+    title = (req.title if req and req.title else "") or "新对话"
+    session = create_session(title=title)
+    if req:
+        ws = session["workspace"]
+        if req.resume_text:
+            ws["resume_text"] = req.resume_text
+        if req.job_text:
+            ws["job_text"] = req.job_text
+        if req.company:
+            ws["company"] = req.company
+    services.store.chat_save(session["id"], session)
+    return {"session": session}
+
+
+@app.patch("/api/chat/sessions/{session_id}")
+async def chat_update_session(session_id: str, req: ChatSessionUpdateRequest) -> dict[str, Any]:
+    session = services.store.chat_get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    if req.title is not None:
+        session["title"] = req.title.strip()[:80] or "新对话"
+    session["updated_at"] = time.time()
+    services.store.chat_save(session_id, session)
+    return {"session": session}
+
+
+@app.delete("/api/chat/sessions/{session_id}")
+async def chat_delete_session(session_id: str) -> dict[str, Any]:
+    if not services.store.chat_delete(session_id):
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"ok": True}
+
+
+@app.get("/api/chat/sessions")
+async def chat_list_sessions(limit: int = 20) -> dict[str, Any]:
+    return {"sessions": services.store.chat_list(limit)}
+
+
+@app.get("/api/chat/sessions/{session_id}")
+async def chat_get_session(session_id: str) -> dict[str, Any]:
+    session = services.store.chat_get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    return {"session": session}
+
+
+async def _stream_copilot(coro_factory) -> StreamingResponse:
+    tracer = services.new_tracer()
+
+    async def gen():
+        turn = await coro_factory(tracer)
+        for event in turn.events:
+            yield _sse(event)
+        async for event in tracer.events():
+            yield _sse(event)
+        yield _sse({
+            "type": "done",
+            "message": turn.assistant_message,
+            "session": turn.session,
+            "trace": tracer.summary(),
+        })
+        tracer.close()
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.post("/api/chat/sessions/{session_id}/message")
+async def chat_message(session_id: str, req: ChatMessageRequest):
+    session = services.store.chat_get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    async def run(tracer: Tracer):
+        return await services.copilot.handle_message(session, req.text, tracer)
+
+    return await _stream_copilot(run)
+
+
+@app.post("/api/chat/sessions/{session_id}/confirm")
+async def chat_confirm(session_id: str, req: ChatConfirmRequest):
+    session = services.store.chat_get(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="session not found")
+    if req.action == "reject":
+        session["pending_proposal"] = None
+        services.store.chat_save(session_id, session)
+        return {"ok": True, "message": "已取消。"}
+
+    async def run(tracer: Tracer):
+        return await services.copilot.confirm_proposal(session, req.proposal_id, tracer)
+
+    return await _stream_copilot(run)
 
 
 @app.get("/api/runs")
@@ -289,9 +493,9 @@ async def memory_delete(mem_id: str) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 @app.post("/api/journal")
-async def journal() -> dict[str, Any]:
+async def journal(req: JournalRequest = JournalRequest()) -> dict[str, Any]:
     tracer = services.new_tracer()
-    result = await services.journal.run(tracer)
+    result = await services.journal.run(tracer, period=req.period)
     result_dict = result.to_dict()
     run_id = services.store.save_run("journal", {}, result_dict, tracer.summary())
     return {"run_id": run_id, "result": result_dict, "trace": tracer.summary()}

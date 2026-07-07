@@ -74,6 +74,47 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_runs_module ON runs(module, created_at);
                 CREATE INDEX IF NOT EXISTS idx_mem_kind ON memories(kind, salience);
                 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts);
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT PRIMARY KEY,
+                    updated_at REAL NOT NULL,
+                    data_json TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS activity_events (
+                    id TEXT PRIMARY KEY,
+                    ts REAL NOT NULL,
+                    session_id TEXT,
+                    run_id TEXT,
+                    kind TEXT NOT NULL,
+                    module TEXT,
+                    summary TEXT,
+                    input_ref TEXT,
+                    artifact_ids TEXT,
+                    meta_json TEXT
+                );
+                CREATE TABLE IF NOT EXISTS system_releases (
+                    id TEXT PRIMARY KEY,
+                    version TEXT NOT NULL,
+                    released_at REAL NOT NULL,
+                    title TEXT NOT NULL,
+                    summary TEXT,
+                    details_path TEXT,
+                    features_json TEXT,
+                    breaking_json TEXT
+                );
+                CREATE TABLE IF NOT EXISTS system_change_events (
+                    id TEXT PRIMARY KEY,
+                    ts REAL NOT NULL,
+                    version TEXT,
+                    category TEXT,
+                    component TEXT,
+                    summary TEXT
+                );
+                CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity_events(ts);
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value_json TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_chat_updated ON chat_sessions(updated_at);
                 """
             )
             self._conn.commit()
@@ -246,6 +287,164 @@ class Store:
             cur = self._conn.execute("DELETE FROM checkpoints WHERE id=?", (cp_id,))
             self._conn.commit()
             return cur.rowcount > 0
+
+    # -- chat sessions ------------------------------------------------------ #
+
+    def chat_save(self, session_id: str, data: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO chat_sessions (id, updated_at, data_json) VALUES (?,?,?)"
+                " ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at,"
+                " data_json=excluded.data_json",
+                (session_id, time.time(), json.dumps(data, ensure_ascii=False)),
+            )
+            self._conn.commit()
+
+    def chat_get(self, session_id: str) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT data_json FROM chat_sessions WHERE id=?", (session_id,)).fetchone()
+        return json.loads(row["data_json"]) if row else None
+
+    def chat_list(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, updated_at, data_json FROM chat_sessions"
+                " ORDER BY updated_at DESC LIMIT ?",
+                (limit,)).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            data = json.loads(r["data_json"])
+            ws = data.get("workspace") or {}
+            msgs = data.get("messages") or []
+            preview = ""
+            for m in reversed(msgs):
+                if m.get("role") == "user" and m.get("content"):
+                    preview = str(m["content"]).strip().replace("\n", " ")[:80]
+                    break
+            out.append({
+                "id": r["id"],
+                "updated_at": r["updated_at"],
+                "created_at": data.get("created_at", r["updated_at"]),
+                "title": data.get("title") or ws.get("company") or "新对话",
+                "preview": preview,
+                "message_count": len(msgs),
+                "company": ws.get("company") or "",
+            })
+        return out
+
+    def chat_delete(self, session_id: str) -> bool:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM chat_sessions WHERE id=?", (session_id,))
+            self._conn.commit()
+            return cur.rowcount > 0
+
+    # -- app settings ------------------------------------------------------- #
+
+    def setting_get(self, key: str) -> Any | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value_json FROM app_settings WHERE key=?", (key,)).fetchone()
+        return json.loads(row["value_json"]) if row else None
+
+    def setting_set(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO app_settings (key, value_json) VALUES (?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value_json=excluded.value_json",
+                (key, json.dumps(value, ensure_ascii=False)),
+            )
+            self._conn.commit()
+
+    # -- activity events ---------------------------------------------------- #
+
+    def activity_insert(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO activity_events (id, ts, session_id, run_id, kind, module,"
+                " summary, input_ref, artifact_ids, meta_json) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    row["id"], row["ts"], row.get("session_id"), row.get("run_id"),
+                    row["kind"], row.get("module"), row.get("summary"),
+                    row.get("input_ref"),
+                    json.dumps(row.get("artifact_ids") or [], ensure_ascii=False),
+                    json.dumps(row.get("meta") or {}, ensure_ascii=False),
+                ),
+            )
+            self._conn.commit()
+
+    def activity_list(
+        self, since_ts: float = 0.0, kind: str | None = None, limit: int = 100
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            if kind:
+                rows = self._conn.execute(
+                    "SELECT * FROM activity_events WHERE ts >= ? AND kind=?"
+                    " ORDER BY ts DESC LIMIT ?",
+                    (since_ts, kind, limit)).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM activity_events WHERE ts >= ? ORDER BY ts DESC LIMIT ?",
+                    (since_ts, limit)).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "id": r["id"], "ts": r["ts"], "session_id": r["session_id"],
+                "run_id": r["run_id"], "kind": r["kind"], "module": r["module"],
+                "summary": r["summary"], "input_ref": r["input_ref"],
+                "artifact_ids": json.loads(r["artifact_ids"]) if r["artifact_ids"] else [],
+                "meta": json.loads(r["meta_json"]) if r["meta_json"] else {},
+            })
+        return out
+
+    # -- system releases ---------------------------------------------------- #
+
+    def system_release_insert(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO system_releases (id, version, released_at, title, summary,"
+                " details_path, features_json, breaking_json) VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    row["id"], row["version"], row["released_at"], row["title"],
+                    row.get("summary"), row.get("details_path"),
+                    json.dumps(row.get("features") or [], ensure_ascii=False),
+                    json.dumps(row.get("breaking") or [], ensure_ascii=False),
+                ),
+            )
+            self._conn.commit()
+
+    def system_release_list(self, limit: int = 20) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM system_releases ORDER BY released_at DESC LIMIT ?",
+                (limit,)).fetchall()
+        out = []
+        for r in rows:
+            out.append({
+                "id": r["id"], "version": r["version"], "released_at": r["released_at"],
+                "title": r["title"], "summary": r["summary"],
+                "details_path": r["details_path"],
+                "features": json.loads(r["features_json"]) if r["features_json"] else [],
+                "breaking": json.loads(r["breaking_json"]) if r["breaking_json"] else [],
+            })
+        return out
+
+    def system_change_insert(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO system_change_events (id, ts, version, category, component, summary)"
+                " VALUES (?,?,?,?,?,?)",
+                (row["id"], row["ts"], row.get("version"), row.get("category"),
+                 row.get("component"), row.get("summary")),
+            )
+            self._conn.commit()
+
+    def system_change_list(self, since_ts: float = 0.0, limit: int = 100) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM system_change_events WHERE ts >= ? ORDER BY ts DESC LIMIT ?",
+                (since_ts, limit)).fetchall()
+        return [dict(r) for r in rows]
 
     def close(self) -> None:
         with self._lock:

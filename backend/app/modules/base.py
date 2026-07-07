@@ -4,9 +4,20 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from ..gateway.registry import Gateway
+
+_KB_ROOT = Path(__file__).resolve().parents[2] / "knowledge_base"
+
+
+def load_kb_relative(*parts: str) -> str:
+    """Load a knowledge-base markdown file; return empty string if missing."""
+    try:
+        return _KB_ROOT.joinpath(*parts).read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def llm_available(gateway: Gateway | None) -> bool:
